@@ -1,33 +1,5 @@
 [
     {
-        "caption": "Clipboard Manager: Cut",
-        "command": "clipboard_manager_cut"
-    },
-    {
-        "caption": "Clipboard Manager: Copy",
-        "command": "clipboard_manager_copy"
-    },
-    {
-        "caption": "Clipboard Manager: Paste",
-        "command": "clipboard_manager_paste"
-    },
-    {
-        "caption": "Clipboard Manager: Next & Paste",
-        "command": "clipboard_manager_next_and_paste"
-    },
-    {
-        "caption": "Clipboard Manager: Previous & Paste",
-        "command": "clipboard_manager_previous_and_paste"
-    },
-    {
-        "caption": "Clipboard Manager: Next",
-        "command": "clipboard_manager_next"
-    },
-    {
-        "caption": "Clipboard Manager: Previous",
-        "command": "clipboard_manager_previous"
-    },
-    {
         "caption": "Clipboard Manager: Choose & Paste",
         "command": "clipboard_manager_choose_and_paste"
     },
@@ -36,11 +8,37 @@
         "command": "clipboard_manager_show"
     },
     {
-        "caption": "Clipboard Manager: Copy to Register",
-        "command": "clipboard_manager_copy_to_register"
-    },
-    {
         "caption": "Clipboard Manager: Show Registers",
         "command": "clipboard_manager_show_registers"
+    },
+    {
+        "caption": "Clipboard Manager: Copy to Register",
+        "command": "clipboard_manager_register",
+        "args": {"mode": "copy"}
+    },
+    {
+        "caption": "Clipboard Manager: Paste from Register",
+        "command": "clipboard_manager_register",
+        "args": {"mode": "paste"}
+    },
+    {
+        "caption": "Clipboard Manager: Reset Register (numbers)",
+        "command": "clipboard_manager_register",
+        "args": {"reset": "numbers"}
+    },
+    {
+        "caption": "Clipboard Manager: Reset Register (letters)",
+        "command": "clipboard_manager_register",
+        "args": {"reset": "letters"}
+    },
+    {
+        "caption": "Clipboard Manager: Reset Register (all)",
+        "command": "clipboard_manager_register",
+        "args": {"reset": "all"}
+    },
+    {
+        "caption": "Clipboard Manager: Remove iBook quotes",
+        "command": "clipboard_manager_edit",
+        "args": {"action": "ibooks"}
     }
 ]

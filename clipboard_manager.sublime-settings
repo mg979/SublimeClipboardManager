@@ -1,0 +1,25 @@
+{
+    // valid modes are "popup", "panel" or "status_bar"
+    "display_mode": "popup",
+
+    // supported selectors for popup syntax
+    "popup_syntaxes": {
+                        "python": "source.python"
+                    },
+
+    // if display_mode is "popup"
+    "display_in_panel_for_unlisted_syntaxes": false,
+
+    // depending on your theme, you may want to adjust this for a better
+    // alignment of the popup when choosing from the quick panel
+    // set to 0 to have it always at the center of the screen
+
+    // recommended:
+    // 200/100 for adaptive
+    // 280/13 for Soda/Superflat
+    // 150/8 for modern themes
+
+    "popup_vertical_offset": 280,
+    // max quick panel visible items for the theme
+    "max_quick_panel_items": 13
+}

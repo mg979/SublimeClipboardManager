@@ -1,16 +1,137 @@
-import re
-
 import sublime
 import sublime_plugin
 
+import re
+import os
+from mdpopups import show_popup as popup
+
 HISTORY, YANK = None, None
 
+CSS = """
+    .mdpopups div.highlight,
+    .mdpopups pre.highlight {
+        border: 2px solid var(--mdpopups-hl-border);
+        padding: 0.5rem;
+        margin-bottom: 0;
+        font-size: 1rem;
+    }
+"""
 
 def plugin_loaded():
-    global HISTORY, YANK
+    global HISTORY, YANK, Vsl
 
     HISTORY = HistoryList([sublime.get_clipboard()])
     YANK = HistoryList()
+
+    pcsets = sublime.load_settings('Package Control.sublime-settings')
+    user = os.path.join(sublime.packages_path(), 'VirtualSpace')
+    installed = 'VirtualSpace' in pcsets.get('installed_packages')
+    if installed:
+        from VirtualSpace.VirtualSpace import VirtualSpaceListener as Vsl
+    elif os.path.isdir(user):
+        from VirtualSpace.VirtualSpace import VirtualSpaceListener as Vsl
+    else:
+        Vsl = False
+
+# ============================================================================
+
+
+def get_clip():
+    """Try to deal with stubborn clipboard refusing to open."""
+    clip = None
+    while not clip:
+        clip = sublime.get_clipboard()
+    return clip
+
+
+def set_clip(s):
+    """Try to deal with stubborn clipboard refusing to open."""
+    while not s == get_clip():
+        sublime.set_clipboard(s)
+
+
+def append_clipboard():
+    """
+    Append the contents of the clipboard to the HISTORY global.
+    """
+    clip = get_clip()
+    HISTORY.append(clip)
+    YANK.append(clip)
+
+
+def update_output_panel(window, registers=False, yank=False):
+    """
+    Update output panel with latest history if it is visible.
+    """
+    panel = window.get_output_panel('clipboard_manager')
+    if panel.window():
+        List = YANK if yank else HISTORY
+        content = List.show_registers() if registers else List.show(yank)
+        panel.run_command('clipboard_manager_dummy', {'content': content})
+
+# ============================================================================
+
+
+def clipboard_display(v, args=False):
+    """Display selected clipboard content in panel or popup."""
+
+    sets = sublime.load_settings("clipboard_manager.sublime-settings")
+    panel = sets.get("display_mode") == "panel"
+    pup = sets.get("display_mode") == "popup"
+    status = sets.get("display_mode") == "status_bar"
+
+    # showing in status bar
+    if not pup and not panel:
+        if status:
+            HISTORY.show_in_status_bar()
+        return
+
+    scheme = v.settings().get('color_scheme')
+    syntax = v.settings().get('syntax')
+
+    # find popup syntax, if popup is enabled
+    if pup:
+        syntax = ""
+        loc = v.sel()[0].b
+        supported = sets.get("popup_syntaxes")
+        for syn in supported:
+            if v.score_selector(loc, supported[syn]):
+                syntax = syn
+                break
+
+    # calling a panel
+    if panel and args:
+        v.window().run_command('clipboard_manager_update_panel',
+                                       {"args": args})
+        return
+
+    elif panel and not args:
+        args = scheme, syntax, HISTORY.current_index(), HISTORY
+        v.window().run_command('clipboard_manager_update_panel',
+                                       {"args": args})
+        return
+
+    # showing popup instead
+
+    if pup and args:
+        List, index = args[3], args[2]
+        offset = sets.get('popup_vertical_offset')
+        max = sets.get('max_quick_panel_items')
+        limit = len(List) if len(List) < max else max
+        vis = v.visible_region()
+        vis_a = v.text_to_layout(vis.a)[1]
+        vis_b = v.text_to_layout(vis.b)[1]
+        mod_height = (offset - 20 * limit) if offset else 0
+        loc = v.layout_to_text(
+            (0, int((vis_a + vis_b) / 2 - mod_height)))
+
+        content = "```" + syntax + "\n" + List[index] + "\n```"
+        popup(v, content, css=CSS, location=loc, max_width=2000)
+    else:
+        content = "```" + syntax + "\n" + HISTORY.current() + "\n```"
+        popup(v, content, css=CSS, location=loc, max_width=2000)
+
+# ============================================================================
 
 
 class HistoryList(list):
@@ -97,6 +218,11 @@ class HistoryList(list):
             return None
         return self[self.__index]
 
+    def current_index(self):
+        if len(self) == 0:
+            return None
+        return self.__index
+
     def at(self, idx):
         self.__index = (idx if idx < len(self) else 0)
         self.status()
@@ -113,7 +239,7 @@ class HistoryList(list):
 
     def first(self):
         """
-        "First" actually actually of means "last",since this is a FIFO stack.
+        "First" actually kind of means "last",since this is a FIFO stack.
         """
         self.__index = len(self) - 1
         self.status()
@@ -125,7 +251,7 @@ class HistoryList(list):
         self.__index = 0
         self.status()
 
-    def status(self):
+    def show_in_status_bar(self):
         copy = self.current()
         if copy:
             copy = copy.replace("\t", "\\t")
@@ -133,43 +259,16 @@ class HistoryList(list):
             copy = copy.replace("\r", "\\r")
             sublime.status_message(
                 u'Set Clipboard to "{copy}"'.format(copy=copy))
-            # for message externalization
-            ClipboardManager.Clip = (copy, self.__index + 1, len(self))
-            sublime.set_clipboard(self.current())
         else:
             sublime.status_message('Nothing in history')
 
-# ============================================================================
 
-
-def clipboard_without_ibooks_quotes():
-    clipboard = sublime.get_clipboard()
-    quotes_re = re.compile(r'^“(.*?)”\s+Excerpt From:.*$', re.DOTALL)
-    match = quotes_re.search(clipboard)
-    if match:
-        clipboard = match.group(1)
-        sublime.set_clipboard(clipboard)
-    return clipboard
-
-
-def append_clipboard():
-    '''
-    Append the contents of the clipboard to the HISTORY global.
-    '''
-    clip = sublime.get_clipboard()
-    HISTORY.append(clip)
-    YANK.append(clip)
-
-
-def update_output_panel(window, registers=False, yank=False):
-    '''
-    Update output panel with latest history if it is visible
-    '''
-    panel = window.get_output_panel('clipboard_manager')
-    if panel.window():
-        List = YANK if yank else HISTORY
-        content = List.show_registers() if registers else List.show(yank)
-        panel.run_command('clipboard_manager_dummy', {'content': content})
+    def status(self):
+        copy = self.current()
+        if copy:
+            set_clip(self.current())
+        else:
+            sublime.status_message('Nothing in history')
 
 # ============================================================================
 
@@ -178,20 +277,12 @@ class ClipboardManager(sublime_plugin.TextCommand):
     action, indent, pop, List = False, False, False, None
     yanking, yank_choice, idx = False, False, None
 
-    def register_to(self):
-        self.view.set_status('clip_man', '  Register in registers key?')
-        self.action = ClipboardManagerListener.action = 'copy'
-
-    def paste_what(self):
-        self.action = ClipboardManagerListener.action = 'paste'
-        self.view.set_status('clip_man', '  Paste from registers key?')
-
     def paste(self, msg='Nothing in history'):
         List = self.List
         if not len(List):
             sublime.status_message(msg)
             return
-        clip = clipboard_without_ibooks_quotes()
+        clip = get_clip()
         if self.indent:
             self.view.run_command('paste_and_indent')
         else:
@@ -226,26 +317,36 @@ class ClipboardManager(sublime_plugin.TextCommand):
     def clear_yank_list(self):
         global YANK
         YANK = HistoryList()
+        sublime.status_message('Yank history cleared')
 
     def clear_history(self):
         global HISTORY
         HISTORY = HistoryList()
+        sublime.status_message('Clipboard history cleared')
 
     def next(self):
         HISTORY.next()
         update_output_panel(self.view.window())
+        clipboard_display(self.view)
 
     def previous(self):
         HISTORY.previous()
         update_output_panel(self.view.window())
+        clipboard_display(self.view)
 
     def paste_next(self):
-        HISTORY.next()
         self.paste()
+        HISTORY.next()
 
     def paste_previous(self):
         HISTORY.previous()
         self.paste()
+
+    def choice_panel(self, index):
+        scheme = self.view.settings().get('color_scheme')
+        syntax = self.view.settings().get('syntax')
+        args = scheme, syntax, index, self.List
+        clipboard_display(self.view, args)
 
     def choose_and_paste(self, msg='Nothing in history'):
         def format(line):
@@ -269,9 +370,13 @@ class ClipboardManager(sublime_plugin.TextCommand):
                 self.idx = idx
                 List.at(idx)
                 self.paste()
+            self.view.window(
+                ).run_command('clipboard_manager_update_panel',
+                              {"close": True})
 
         if lines:
-            sublime.active_window().show_quick_panel(lines, on_done)
+            sublime.active_window().show_quick_panel(lines, on_done, 2, -1,
+                                                     self.choice_panel)
         else:
             sublime.status_message(msg)
 
@@ -314,23 +419,61 @@ class ClipboardManager(sublime_plugin.TextCommand):
             run()
 
 
+class ClipboardManagerCommandMode(sublime_plugin.TextCommand):
+    """Enter command mode if not active, restore previous state when exiting.
+
+        L.command_mode = (bool, bool)
+        [0] is True if this command has been activated
+        [1] is the previous state of command mode
+    """
+    def run(self, edit):
+
+        ClipboardManagerListener.command_mode = True
+        self.view.set_status(
+            "clip_man", "  Clipboard Manager: awaiting command  ")
+
+
+class ClipboardManagerUpdatePanel(sublime_plugin.TextCommand):
+
+    def run(self, edit, args=False, close=False):
+
+        if close:
+            self.view.window().destroy_output_panel('choose_and_paste')
+            return
+
+        scheme, syntax, index, List = args
+        w = sublime.active_window()
+        v = w.create_output_panel('choose_and_paste')
+        w.run_command("show_panel", {
+            "panel": "output.choose_and_paste"})
+        v.settings().set('syntax', syntax)
+        v.settings().set('color_scheme', scheme)
+
+        all = sublime.Region(0, v.size())
+        v.erase(edit, all)
+        v.insert(edit, 0, List[index])
+
+
 class ClipboardManagerRegister(sublime_plugin.TextCommand):
 
     def copy(self, s):
         self.view.run_command('copy')
-        content = sublime.get_clipboard()
+        content = get_clip()
         HISTORY.register(s, content)
         update_output_panel(self.view.window(), True)
         sublime.active_window().status_message(
             "   Registered in " + s)
 
     def paste(self, s):
-        sublime.active_window().status_message("Pasted register " + s)
-        sublime.set_clipboard(HISTORY.register(s))
-        if self.indent:
-            self.view.run_command('paste_and_indent')
+        if s in HISTORY.registers:
+            sublime.active_window().status_message("Pasted register " + s)
+            set_clip(HISTORY.register(s))
+            if self.indent:
+                self.view.run_command('paste_and_indent')
+            else:
+                self.view.run_command('paste')
         else:
-            self.view.run_command('paste')
+            sublime.active_window().status_message("Not a valid register")
 
     def on_change(self, s):
         if not s:
@@ -351,12 +494,16 @@ class ClipboardManagerRegister(sublime_plugin.TextCommand):
             w.run_command('hide_panel')
 
     def run(self, edit, mode='copy', indent=False, reset='letters'):
+        msg = ('Register in registers key?', 'Paste from registers key?')
 
         if mode == "reset":
             HISTORY.reset_register(reset)
             return
 
+        msg = msg[0] if mode == 'copy' else msg[1]
+        sublime.active_window().status_message(msg)
         self.indent, self.mode = indent, mode
+
         s = "Enter a key (0-9, a-Z):"
         sublime.active_window().show_input_panel(s, "", None, self.on_change, None)
 
@@ -376,14 +523,28 @@ class ClipboardManagerShowRegisters(sublime_plugin.WindowCommand):
                                 {'panel': 'output.clipboard_manager'})
         update_output_panel(self.window, True)
 
+
+class ClipboardManagerEdit(sublime_plugin.TextCommand):
+
+    def ibooks():
+        for i, clip in enumerate(HISTORY):
+            quotes_re = re.compile(r'^“(.*?)”\s+Excerpt From:.*$', re.DOTALL)
+            match = quotes_re.search(clip)
+            if match:
+                clip = match.group(1)
+                HISTORY[i] = clip
+
+    def run(self, edit, action="ibooks"):
+
+        run = eval('self.' + action)
+        run()
+
 # ============================================================================
 
 
 class ClipboardManagerListener(sublime_plugin.EventListener):
     just_run = False
-
-    # def on_activated(self, view):
-    #     append_clipboard()
+    command_mode = False
 
     def on_text_command(self, view, command_name, args):
 
@@ -393,9 +554,27 @@ class ClipboardManagerListener(sublime_plugin.EventListener):
         elif command_name in ['copy', 'cut']:
             self.just_run = True
             view.run_command(command_name)
+            if Vsl:
+                Vsl.process_command(Vsl, view)
             append_clipboard()
             update_output_panel(view.window())
             return "bla"
+
+    def on_query_context(self, view, key, operator, operand, match_all):
+
+        if ClipboardManagerListener.command_mode:
+            if key == "clip_man":
+                if operator == sublime.OP_EQUAL and operand == "non_stop":
+                    pass
+                else:
+                    ClipboardManagerListener.command_mode = False
+                    view.erase_status("clip_man")
+                view.window().destroy_output_panel('choose_and_paste')
+                return True
+            else:
+                ClipboardManagerListener.command_mode = False
+                view.erase_status("clip_man")
+        return None
 
 
 class ClipboardManagerDummy(sublime_plugin.TextCommand):
