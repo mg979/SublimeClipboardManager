@@ -318,6 +318,11 @@ class ClipboardManager(sublime_plugin.TextCommand):
                 # keep popping the bottom-most index
                 YANK.first()
                 self.paste()
+
+            if YANK_MODE and not len(YANK) and explicit_yank_mode:
+                if sets.get('end_yank_mode_on_emptied_stack', False):
+                    self.view.window().run_command('clipboard_manager_yank_mode')
+
         else:
             sublime.status_message('Nothing to yank')
 

@@ -2,6 +2,8 @@
     // make yank list separate from normal history list
     // if true, yank mode must be expressly selected before copying
     "explicit_yank_mode": true,
+    // exit yank mode automatically if yank stack has been consumed
+    "end_yank_mode_on_emptied_stack": true,
 
     // valid modes are "popup", "panel" or "status_bar"
     "display_mode": "popup",
