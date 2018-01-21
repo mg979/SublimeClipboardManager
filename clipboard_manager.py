@@ -308,7 +308,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
             self.view.run_command('paste')
         if self.pop:
             ix = List.index(clip)
-            List.remove(clip)
+            del List[ix]
             del List.clip_syntaxes[ix]
         update_output_panel(self.view.window())
 
@@ -318,7 +318,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
             self.List = YANK
             if choice:
                 self.choose_and_paste()
-            elif self.idx is not None and len(YANK) - 1 >= self.idx:
+            elif self.idx is not None and (len(YANK) - 1) >= self.idx:
                 # keep yanking from where you left the quick panel
                 # reducing index because the previous one has been eaten
                 YANK.at(self.idx - 1)
@@ -432,8 +432,8 @@ class ClipboardManager(sublime_plugin.TextCommand):
             self.indent = False
 
         if 'yank' in kwargs:
-            self.yank('choose' in kwargs)
             self.pop = True
+            self.yank('choose' in kwargs)
             return
         else:
             self.List = HISTORY
@@ -476,11 +476,15 @@ class ClipboardManagerYankMode(sublime_plugin.TextCommand):
 
     def run(self, edit):
         """Run."""
-        global YANK_MODE
+        global YANK_MODE, YANK
 
         YANK_MODE = not YANK_MODE
         msg = 'On' if YANK_MODE else 'Off'
         sublime.status_message("  YANK MODE:  " + msg)
+
+        # clear yank list if manually exiting yank mode
+        if not YANK_MODE and explicit_yank_mode:
+            YANK = HistoryList()
 
 # ===========================================================================
 
