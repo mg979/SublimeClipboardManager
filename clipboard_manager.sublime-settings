@@ -1,19 +1,21 @@
 {
+    // make yank list separate from normal history list
+    // if true, yank mode must be expressly selected before copying
+    "explicit_yank_mode": true,
+
     // valid modes are "popup", "panel" or "status_bar"
     "display_mode": "popup",
 
     // supported selectors for popup syntax
+    // same identifiers as per github markdown codeblocks
     "popup_syntaxes": {
                         "python": "source.python",
                         "sh": "source.shell",
                     },
 
-    // if display_mode is "popup"
-    "display_in_panel_for_unlisted_syntaxes": false,
-
     // depending on your theme, you may want to adjust this for a better
     // alignment of the popup when choosing from the quick panel
-    // set to 0 to have it always at the center of the screen
+    // set to 0 to have it always at the center of the screen (safe default)
 
     // recommended:
     // 200/100 for adaptive

@@ -1,8 +1,7 @@
+"""Sublime Clipboard Manager."""
 import sublime
 import sublime_plugin
-
 import re
-import os
 from mdpopups import show_popup as popup
 
 HISTORY, YANK = None, None
@@ -20,7 +19,7 @@ CSS = """
 
 def plugin_loaded():
     """On restart."""
-    global HISTORY, YANK, Vsl, sets
+    global HISTORY, YANK, YANK_MODE, Vsl, sets, explicit_yank_mode
 
     sets = sublime.load_settings("clipboard_manager.sublime-settings")
 
@@ -31,6 +30,10 @@ def plugin_loaded():
 
     HISTORY = HistoryList()
     YANK = HistoryList()
+
+    explicit_yank_mode = sets.get('explicit_yank_mode', False)
+    # allow copying to yank list already, if explicit mode is off
+    YANK_MODE = not explicit_yank_mode
 
 # ============================================================================
 
@@ -52,8 +55,12 @@ def set_clip(s):
 def append_clipboard():
     """Append the contents of the clipboard to the HISTORY and YANK globals."""
     clip = get_clip()
+    if YANK_MODE:
+        YANK.append(clip)
+        # only use yank list, if explicit_yank_mode is active
+        if explicit_yank_mode:
+            return
     HISTORY.append(clip)
-    YANK.append(clip)
 
 
 def update_output_panel(window, registers=False, yank=False):
@@ -260,7 +267,7 @@ class HistoryList(list):
             sublime.status_message('Nothing in history')
 
     def status(self):
-        """Unclear."""
+        """Status."""
         copy = self.current()
         if copy:
             set_clip(self.current())
@@ -271,10 +278,13 @@ class HistoryList(list):
 
 
 class ClipboardManager(sublime_plugin.TextCommand):
+    """Main class."""
+
     action, indent, pop, List = False, False, False, None
     yanking, yank_choice, idx = False, False, None
 
     def paste(self, msg='Nothing in history'):
+        """Paste item."""
         List = self.List
         if not len(List):
             sublime.status_message(msg)
@@ -289,7 +299,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
         update_output_panel(self.view.window())
 
     def yank(self, choice):
-
+        """Yank item."""
         if len(YANK):
             self.List = YANK
             if choice:
@@ -312,38 +322,46 @@ class ClipboardManager(sublime_plugin.TextCommand):
             sublime.status_message('Nothing to yank')
 
     def clear_yank_list(self):
+        """Clear yank list."""
         global YANK
         YANK = HistoryList()
         sublime.status_message('Yank history cleared')
 
     def clear_history(self):
+        """Clear history."""
         global HISTORY
         HISTORY = HistoryList()
         sublime.status_message('Clipboard history cleared')
 
     def next(self):
+        """Next item in history."""
         HISTORY.next()
         update_output_panel(self.view.window())
         clipboard_display(self.view)
 
     def previous(self):
+        """Previous item in history."""
         HISTORY.previous()
         update_output_panel(self.view.window())
         clipboard_display(self.view)
 
     def paste_next(self):
+        """Paste next item."""
         self.paste()
         HISTORY.next()
 
     def paste_previous(self):
+        """Paste previous item."""
         HISTORY.previous()
         self.paste()
 
     def choice_panel(self, index):
+        """Choice panel."""
         args = self.List, index
         clipboard_display(self.view, args)
 
     def choose_and_paste(self, msg='Nothing in history'):
+        """Choose and paste."""
         def format(line):
             return line.replace('\n', '\\n')[:64]
 
@@ -374,13 +392,14 @@ class ClipboardManager(sublime_plugin.TextCommand):
             sublime.status_message(msg)
 
     def register(self, x):
+        """Register."""
         if self.action == 'copy':
             self.view.run_command("clipboard_manager_copy_to_register", {"register": x})
         elif self.action == 'paste':
             self.view.run_command('clipboard_manager_paste_from_register', {"register": x, "indent": self.indent})
 
     def run(self, edit, **kwargs):
-
+        """Run."""
         args = {"paste": self.paste, "yank": self.yank, "clear_yank_list": self.clear_yank_list,
                 "clear_history": self.clear_history, "next": self.next, "previous": self.previous,
                 "paste_next": self.paste_next, "paste_previous": self.paste_previous,
@@ -413,24 +432,45 @@ class ClipboardManager(sublime_plugin.TextCommand):
         for arg in kwargs:
             args[arg]()
 
+# ===========================================================================
+
 
 class ClipboardManagerCommandMode(sublime_plugin.TextCommand):
-    """Enter command mode if not active, restore previous state when exiting.
+    """
+    Enter command mode if not active, restore previous state when exiting.
 
         L.command_mode = (bool, bool)
         [0] is True if this command has been activated
         [1] is the previous state of command mode
     """
-    def run(self, edit):
 
+    def run(self, edit):
+        """Run."""
         ClipboardManagerListener.command_mode = True
         self.view.set_status("clip_man", "  Clipboard Manager: awaiting command  ")
 
+# ===========================================================================
+
+
+class ClipboardManagerYankMode(sublime_plugin.TextCommand):
+    """Set yank mode."""
+
+    def run(self, edit):
+        """Run."""
+        global YANK_MODE
+
+        YANK_MODE = not YANK_MODE
+        msg = 'On' if YANK_MODE else 'Off'
+        sublime.status_message("  YANK MODE:  " + msg)
+
+# ===========================================================================
+
 
 class ClipboardManagerUpdatePanel(sublime_plugin.TextCommand):
+    """Show current clip in output panel."""
 
     def run(self, edit, args=False, close=False):
-
+        """Run."""
         if close:
             self.view.window().destroy_output_panel('choose_and_paste')
             return
@@ -448,8 +488,10 @@ class ClipboardManagerUpdatePanel(sublime_plugin.TextCommand):
 
 
 class ClipboardManagerRegister(sublime_plugin.TextCommand):
+    """Copy to or paste from register."""
 
     def copy(self, s):
+        """Copy to register."""
         self.view.run_command('copy')
         content = get_clip()
         HISTORY.register(s, content)
@@ -457,6 +499,7 @@ class ClipboardManagerRegister(sublime_plugin.TextCommand):
         sublime.active_window().status_message("   Registered in " + s)
 
     def paste(self, s):
+        """Paste from register."""
         if s in HISTORY.registers:
             sublime.active_window().status_message("Pasted register " + s)
             set_clip(HISTORY.register(s))
@@ -468,6 +511,7 @@ class ClipboardManagerRegister(sublime_plugin.TextCommand):
             sublime.active_window().status_message("Not a valid register")
 
     def on_change(self, s):
+        """Execute on valid entered character."""
         if not s:
             return
 
@@ -487,6 +531,7 @@ class ClipboardManagerRegister(sublime_plugin.TextCommand):
         w.run_command('hide_panel')
 
     def run(self, edit, mode='copy', indent=False, reset='letters'):
+        """Run."""
         msg = ('Register in registers key?', 'Paste from registers key?')
 
         if mode == "reset":
@@ -504,20 +549,28 @@ class ClipboardManagerRegister(sublime_plugin.TextCommand):
 
 
 class ClipboardManagerShow(sublime_plugin.WindowCommand):
+    """Show history in output panel."""
+
     def run(self, yank=False):
+        """Run."""
         self.window.run_command('show_panel', {'panel': 'output.clipboard_manager'})
         update_output_panel(self.window, yank=yank)
 
 
 class ClipboardManagerShowRegisters(sublime_plugin.WindowCommand):
+    """Show registers in output panel."""
+
     def run(self):
+        """Run."""
         self.window.run_command('show_panel', {'panel': 'output.clipboard_manager'})
         update_output_panel(self.window, True)
 
 
 class ClipboardManagerEdit(sublime_plugin.TextCommand):
+    """History manipulation command."""
 
     def ibooks():
+        """Remove ibook quotes."""
         for i, clip in enumerate(HISTORY):
             quotes_re = re.compile(r'^“(.*?)”\s+Excerpt From:.*$', re.DOTALL)
             match = quotes_re.search(clip)
@@ -526,7 +579,7 @@ class ClipboardManagerEdit(sublime_plugin.TextCommand):
                 HISTORY[i] = clip
 
     def run(self, edit, action="ibooks"):
-
+        """Run."""
         if action == "ibooks":
             self.ibooks()
 
@@ -534,11 +587,13 @@ class ClipboardManagerEdit(sublime_plugin.TextCommand):
 
 
 class ClipboardManagerListener(sublime_plugin.EventListener):
+    """Main listener."""
+
     just_run = False
     command_mode = False
 
     def on_text_command(self, view, command_name, args):
-
+        """on_text_command event."""
         if self.just_run:
             self.just_run = False
 
@@ -552,6 +607,10 @@ class ClipboardManagerListener(sublime_plugin.EventListener):
             return "ClipboardManagerListener"
 
     def on_query_context(self, view, key, operator, operand, match_all):
+        """on_query_context event."""
+        if key == "clip_man":
+            if operator == sublime.OP_EQUAL and operand == "yank_mode":
+                return explicit_yank_mode
 
         if ClipboardManagerListener.command_mode:
             if key == "clip_man":
@@ -569,7 +628,10 @@ class ClipboardManagerListener(sublime_plugin.EventListener):
 
 
 class ClipboardManagerDummy(sublime_plugin.TextCommand):
+    """Dummy command."""
+
     def run(self, edit, content):
+        """Run."""
         region = sublime.Region(0, self.view.size())
         self.view.replace(edit, region, '')
         self.view.insert(edit, 0, content)
