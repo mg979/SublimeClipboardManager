@@ -102,6 +102,8 @@ def clipboard_display(v, args=False):
         return
 
     (List, index) = args if args else (HISTORY, HISTORY.current_index())
+    if index is None:   # no more clips
+        return
     syntax, scheme, codeblock_syn = List.clip_syntaxes[index]
 
     # calling a panel
@@ -305,7 +307,9 @@ class ClipboardManager(sublime_plugin.TextCommand):
             inline_popup(msg)
             return
 
-        clip = get_clip()
+        # ensure correct clipboard content
+        clip = List.current()
+        set_clip(clip)
 
         if self.indent:
             self.view.run_command('paste_and_indent')
