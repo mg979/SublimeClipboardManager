@@ -64,7 +64,7 @@ def append_clipboard():
     clip = get_clip()
     if YANK_MODE:
         YANK.append(clip)
-        # only use yank list, if explicit_yank_mode is active
+        # if explicit_yank_mode is active, use only yank list
         if explicit_yank_mode:
             return
     HISTORY.append(clip)
@@ -163,8 +163,7 @@ class HistoryList(list):
         """Show registers in output panel."""
         ret = ""
         ret += " CLIPBOARD REGISTERS (%d)\n" % len(self.registers.items())
-        ret += "=====================%s==\n" % ("=" * len(
-            str(len(self.registers.items()))))
+        ret += "=====================%s==\n" % ("=" * len(str(len(self.registers.items()))))
         for key, item in self.registers.items():
             item = item.replace("\t", '\\t')
             item = item.replace("\r\n", "\n")
@@ -308,7 +307,9 @@ class ClipboardManager(sublime_plugin.TextCommand):
         else:
             self.view.run_command('paste')
         if self.pop:
+            ix = List.index(clip)
             List.remove(clip)
+            del List.clip_syntaxes[ix]
         update_output_panel(self.view.window())
 
     def yank(self, choice):
