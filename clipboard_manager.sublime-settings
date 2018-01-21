@@ -6,7 +6,7 @@
     "end_yank_mode_on_emptied_stack": true,
 
     // valid modes are "popup", "panel" or "status_bar"
-    "display_mode": "popup",
+    "display_mode": "panel",
 
     // supported selectors for popup syntax
     // same identifiers as per github markdown codeblocks

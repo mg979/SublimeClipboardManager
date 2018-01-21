@@ -16,6 +16,13 @@ CSS = """
     }
 """
 
+INLINE = """
+    body {
+        border: 2px solid var(--mdpopups-hl-border);
+        padding: 0.5rem;
+    }
+"""
+
 
 def plugin_loaded():
     """On restart."""
@@ -70,6 +77,12 @@ def update_output_panel(window, registers=False, yank=False):
         List = YANK if yank else HISTORY
         content = List.show_registers() if registers else List.show(yank)
         panel.run_command('clipboard_manager_dummy', {'content': content})
+
+
+def inline_popup(content):
+    """Show message in popup at cursor."""
+    v = sublime.active_window().active_view()
+    popup(v, content, css=INLINE, location=-1, max_width=2000)
 
 # ============================================================================
 
@@ -264,7 +277,7 @@ class HistoryList(list):
             copy = copy.replace("\r", "\\r")
             sublime.status_message(u'Set Clipboard to "{copy}"'.format(copy=copy))
         else:
-            sublime.status_message('Nothing in history')
+            inline_popup('Nothing in history')
 
     def status(self):
         """Status."""
@@ -272,7 +285,7 @@ class HistoryList(list):
         if copy:
             set_clip(self.current())
         else:
-            sublime.status_message('Nothing in history')
+            inline_popup('Nothing in history')
 
 # ============================================================================
 
@@ -287,7 +300,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
         """Paste item."""
         List = self.List
         if not len(List):
-            sublime.status_message(msg)
+            inline_popup(msg)
             return
         clip = get_clip()
         if self.indent:
@@ -324,7 +337,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
                     self.view.window().run_command('clipboard_manager_yank_mode')
 
         else:
-            sublime.status_message('Nothing to yank')
+            inline_popup('Nothing to yank')
 
     def clear_yank_list(self):
         """Clear yank list."""
@@ -372,7 +385,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
 
         List = self.List
         if not len(List):
-            sublime.status_message(msg)
+            inline_popup(msg)
             return
         lines = []
         line_map = {}
@@ -394,7 +407,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
         if lines:
             sublime.active_window().show_quick_panel(lines, on_done, 2, -1, self.choice_panel)
         else:
-            sublime.status_message(msg)
+            inline_popup(msg)
 
     def register(self, x):
         """Register."""
