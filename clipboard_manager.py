@@ -106,7 +106,7 @@ def clipboard_display(v, args=False):
 
     # calling a panel
     if panel:
-        args = scheme, syntax, index, List
+        args = (scheme, syntax, index, List.clips)
         v.window().run_command('clipboard_manager_update_panel', {"args": args})
         return
 
@@ -115,14 +115,14 @@ def clipboard_display(v, args=False):
     if pup and args:
         offset = sets.get('popup_vertical_offset')
         max = sets.get('max_quick_panel_items')
-        limit = len(List) if len(List) < max else max
+        limit = len(List.clips) if len(List.clips) < max else max
         vis = v.visible_region()
         vis_a = v.text_to_layout(vis.a)[1]
         vis_b = v.text_to_layout(vis.b)[1]
         mod_height = (offset - 20 * limit) if offset else 0
         loc = v.layout_to_text((0, int((vis_a + vis_b) / 2 - mod_height)))
 
-        st = List[index]
+        st = List.clips[index]
         content = "```" + codeblock_syn + "\n" + (st[:350] + "\n...\n" if len(st) > 500 else st) + "\n```"
         popup(v, content, css=CSS, location=loc, max_width=2000)
     else:
@@ -133,21 +133,24 @@ def clipboard_display(v, args=False):
 # ============================================================================
 
 
-class HistoryList(list):
-    """List type for storing the history. Maintains a "pointer" to the current clipboard item."""
+class HistoryList(object):
+    """Object for storing the history. Maintains a "pointer" to the current clipboard item."""
 
-    registers = {}
-    SIZE = 256
-    __index = 0
-    clip_syntaxes = []
+    def __init__(self):
+        """Initialize history."""
+        self.clips = []
+        self.registers = {}
+        self.max_clips = 256
+        self.__index = 0
+        self.clip_syntaxes = []
 
     def show(self, yank=False):
         """Show history entries in output panel."""
-        List = 'YANK' if yank else 'CLIPBOARD'
+        title = 'YANK' if yank else 'CLIPBOARD'
         ret = ""
-        ret += " " + List + " HISTORY (%d)\n" % len(self)
-        ret += "====================%s==\n" % ("=" * len(str(len(self))))
-        for i, item in enumerate(self):
+        ret += " " + title + " HISTORY (%d)\n" % len(self.clips)
+        ret += "====================%s==\n" % ("=" * len(str(len(self.clips))))
+        for i, item in enumerate(self.clips):
             if i == self.__index:
                 ret += '--> '
             else:
@@ -215,34 +218,30 @@ class HistoryList(list):
 
     def append(self, item):
         """Append to the history, or reposition item if already present."""
-        if self and item in self:
-            ix = self.index(item)
-            del self[ix]
+        if self.clips and item in self.clips:
+            ix = self.clips.index(item)
+            del self.clips[ix]
             del self.clip_syntaxes[ix]
 
-        self.insert(0, item)
+        self.clips.insert(0, item)
         self.clip_syntaxes.insert(0, self.clip_syntax())
         self.__index = 0
 
-        # for some reason clip_syntaxes is updated twice!? correct this insult
-        if len(self.clip_syntaxes) > len(self):
-            del self.clip_syntaxes[0]
-
-        if len(self) > self.SIZE:
-            del self[-1]
+        if len(self.clips) > self.max_clips:
+            del self.clips[-1]
             del self.clip_syntaxes[-1]
 
     def current(self):
         """Return item at current history index."""
-        return self[self.__index] if len(self) else None
+        return self.clips[self.__index] if len(self.clips) else None
 
     def current_index(self):
         """Return current history index."""
-        return self.__index if len(self) else None
+        return self.__index if len(self.clips) else None
 
     def at(self, idx):
         """Reposition index."""
-        self.__index = (idx if idx < len(self) else 0)
+        self.__index = (idx if idx < len(self.clips) else 0)
         self.status()
 
     def next(self):
@@ -253,13 +252,13 @@ class HistoryList(list):
 
     def previous(self):
         """Reposition index to previous item."""
-        if self.__index < len(self) - 1:
+        if self.__index < len(self.clips) - 1:
             self.__index += 1
         self.status()
 
     def first(self):
         """'first' actually kind of means 'last', since this is a FIFO stack."""
-        self.__index = len(self) - 1
+        self.__index = len(self.clips) - 1
         self.status()
 
     def last(self):
@@ -295,31 +294,46 @@ class ClipboardManager(sublime_plugin.TextCommand):
     action, indent, pop, List = False, False, False, None
     yanking, yank_choice, idx = False, False, None
 
-    def paste(self, msg='Nothing in history'):
+    # ---------------------------------------------------------------------------
+
+    def paste(self, yanking=False):
         """Paste item."""
         List = self.List
-        if not len(List):
+        msg = 'Nothing in history' if not yanking else 'Nothing in yank stack'
+
+        if not len(List.clips):
             inline_popup(msg)
             return
+
         clip = get_clip()
+
         if self.indent:
             self.view.run_command('paste_and_indent')
         else:
             self.view.run_command('paste')
         if self.pop:
-            ix = List.index(clip)
-            del List[ix]
+            ix = List.clips.index(clip)
+            del List.clips[ix]
             del List.clip_syntaxes[ix]
-        update_output_panel(self.view.window())
+
+        update_output_panel(self.view.window(), yank=yanking)
+
+    # ---------------------------------------------------------------------------
 
     def yank(self, choice):
         """Yank item."""
-        if len(YANK):
+        if len(YANK.clips):
             self.List = YANK
+
             if choice:
-                self.choose_and_paste()
-            elif self.idx is not None and (len(YANK) - 1) >= self.idx:
-                # keep yanking from where you left the quick panel
+                self.choose_and_paste(yanking=True)
+
+            # self.idx starts as None. If it's not, it's because yanking didn't
+            # start from the bottom, but from somewhere via choose&paste
+            # in this case, yanking must proceed from that point
+
+            elif self.idx is not None and (len(YANK.clips) - 1) >= self.idx:
+                # keep yanking from where you left the quick panel,
                 # reducing index because the previous one has been eaten
                 YANK.at(self.idx - 1)
                 self.idx -= 1
@@ -327,30 +341,69 @@ class ClipboardManager(sublime_plugin.TextCommand):
                 # again from the bottom, if there's something left
                 if self.idx < 0:
                     self.idx = None
-                self.paste()
+                self.paste(yanking=True)
+
             else:
                 # keep popping the bottom-most index
                 YANK.first()
-                self.paste()
+                self.paste(yanking=True)
 
-            if YANK_MODE and not len(YANK) and explicit_yank_mode:
+            if YANK_MODE and not len(YANK.clips) and explicit_yank_mode:
                 if sets.get('end_yank_mode_on_emptied_stack', False):
                     self.view.window().run_command('clipboard_manager_yank_mode')
 
         else:
             inline_popup('Nothing to yank')
 
+    # ---------------------------------------------------------------------------
+
+    def choose_and_paste(self, yanking=False):
+        """Choose and paste."""
+        def format(line):
+            return line.replace('\n', '\\n')[:64]
+
+        msg = 'Nothing in history' if not yanking else 'Nothing in yank stack'
+        List = self.List
+        if not len(List.clips):
+            inline_popup(msg)
+            return
+        lines = []
+        line_map = {}
+        # filter out duplicates, keeping the first instance, and format
+        for i, line in enumerate(List.clips):
+            if i == List.clips.index(line):
+                line_map[len(lines)] = i
+                lines.append(format(line))
+
+        def on_done(idx):
+            if idx >= 0:
+                idx = line_map[idx]
+                self.idx = idx
+                List.at(idx)
+                self.paste(yanking)
+            self.view.hide_popup()
+            self.view.window().run_command('clipboard_manager_update_panel', {"close": True})
+
+        if lines:
+            sublime.active_window().show_quick_panel(lines, on_done, 2, -1, self.choice_panel)
+        else:
+            inline_popup(msg)
+
+    # ---------------------------------------------------------------------------
+
     def clear_yank_list(self):
         """Clear yank list."""
         global YANK
         YANK = HistoryList()
         sublime.status_message('Yank history cleared')
+        inline_popup('Yank history cleared')
 
     def clear_history(self):
         """Clear history."""
         global HISTORY
         HISTORY = HistoryList()
         sublime.status_message('Clipboard history cleared')
+        inline_popup('Clipboard history cleared')
 
     def next(self):
         """Next item in history."""
@@ -379,43 +432,14 @@ class ClipboardManager(sublime_plugin.TextCommand):
         args = self.List, index
         clipboard_display(self.view, args)
 
-    def choose_and_paste(self, msg='Nothing in history'):
-        """Choose and paste."""
-        def format(line):
-            return line.replace('\n', '\\n')[:64]
-
-        List = self.List
-        if not len(List):
-            inline_popup(msg)
-            return
-        lines = []
-        line_map = {}
-        # filter out duplicates, keeping the first instance, and format
-        for i, line in enumerate(List):
-            if i == List.index(line):
-                line_map[len(lines)] = i
-                lines.append(format(line))
-
-        def on_done(idx):
-            if idx >= 0:
-                idx = line_map[idx]
-                self.idx = idx
-                List.at(idx)
-                self.paste()
-            self.view.hide_popup()
-            self.view.window().run_command('clipboard_manager_update_panel', {"close": True})
-
-        if lines:
-            sublime.active_window().show_quick_panel(lines, on_done, 2, -1, self.choice_panel)
-        else:
-            inline_popup(msg)
-
     def register(self, x):
         """Register."""
         if self.action == 'copy':
             self.view.run_command("clipboard_manager_copy_to_register", {"register": x})
         elif self.action == 'paste':
             self.view.run_command('clipboard_manager_paste_from_register', {"register": x, "indent": self.indent})
+
+    # ---------------------------------------------------------------------------
 
     def run(self, edit, **kwargs):
         """Run."""
@@ -431,18 +455,18 @@ class ClipboardManager(sublime_plugin.TextCommand):
         else:
             self.indent = False
 
+        if 'pop' in kwargs:
+            self.pop = True
+            del kwargs['pop']
+        else:
+            self.pop = False
+
         if 'yank' in kwargs:
             self.pop = True
             self.yank('choose' in kwargs)
             return
         else:
             self.List = HISTORY
-
-        if 'pop' in kwargs:
-            self.pop = True
-            del kwargs['pop']
-        else:
-            self.pop = False
 
         if 'register' in kwargs:
             self.register(kwargs['register'])
@@ -455,13 +479,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
 
 
 class ClipboardManagerCommandMode(sublime_plugin.TextCommand):
-    """
-    Enter command mode if not active, restore previous state when exiting.
-
-        L.command_mode = (bool, bool)
-        [0] is True if this command has been activated
-        [1] is the previous state of command mode
-    """
+    """Toggle command mode."""
 
     def run(self, edit):
         """Run."""
@@ -498,7 +516,7 @@ class ClipboardManagerUpdatePanel(sublime_plugin.TextCommand):
             self.view.window().destroy_output_panel('choose_and_paste')
             return
 
-        scheme, syntax, index, List = args
+        scheme, syntax, index, clips = args
         w = sublime.active_window()
         v = w.create_output_panel('choose_and_paste')
         w.run_command("show_panel", {"panel": "output.choose_and_paste"})
@@ -507,7 +525,9 @@ class ClipboardManagerUpdatePanel(sublime_plugin.TextCommand):
 
         all = sublime.Region(0, v.size())
         v.erase(edit, all)
-        v.insert(edit, 0, List[index])
+        v.insert(edit, 0, clips[index])
+
+# ===========================================================================
 
 
 class ClipboardManagerRegister(sublime_plugin.TextCommand):
