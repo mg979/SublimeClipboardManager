@@ -4,7 +4,8 @@
 
     // supported selectors for popup syntax
     "popup_syntaxes": {
-                        "python": "source.python"
+                        "python": "source.python",
+                        "sh": "source.shell",
                     },
 
     // if display_mode is "popup"
@@ -19,7 +20,7 @@
     // 280/13 for Soda/Superflat
     // 150/8 for modern themes
 
-    "popup_vertical_offset": 280,
+    "popup_vertical_offset": 0,
     // max quick panel visible items for the theme
     "max_quick_panel_items": 13
 }

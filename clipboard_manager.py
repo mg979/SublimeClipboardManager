@@ -17,21 +17,20 @@ CSS = """
     }
 """
 
+
 def plugin_loaded():
-    global HISTORY, YANK, Vsl
+    """On restart."""
+    global HISTORY, YANK, Vsl, sets
 
-    HISTORY = HistoryList([sublime.get_clipboard()])
-    YANK = HistoryList()
+    sets = sublime.load_settings("clipboard_manager.sublime-settings")
 
-    pcsets = sublime.load_settings('Package Control.sublime-settings')
-    user = os.path.join(sublime.packages_path(), 'VirtualSpace')
-    installed = 'VirtualSpace' in pcsets.get('installed_packages')
-    if installed:
+    try:
         from VirtualSpace.VirtualSpace import VirtualSpaceListener as Vsl
-    elif os.path.isdir(user):
-        from VirtualSpace.VirtualSpace import VirtualSpaceListener as Vsl
-    else:
+    except ImportError:
         Vsl = False
+
+    HISTORY = HistoryList()
+    YANK = HistoryList()
 
 # ============================================================================
 
@@ -46,23 +45,19 @@ def get_clip():
 
 def set_clip(s):
     """Try to deal with stubborn clipboard refusing to open."""
-    while not s == get_clip():
+    while s != get_clip():
         sublime.set_clipboard(s)
 
 
 def append_clipboard():
-    """
-    Append the contents of the clipboard to the HISTORY global.
-    """
+    """Append the contents of the clipboard to the HISTORY and YANK globals."""
     clip = get_clip()
     HISTORY.append(clip)
     YANK.append(clip)
 
 
 def update_output_panel(window, registers=False, yank=False):
-    """
-    Update output panel with latest history if it is visible.
-    """
+    """Update output panel with latest history if it is visible."""
     panel = window.get_output_panel('clipboard_manager')
     if panel.window():
         List = YANK if yank else HISTORY
@@ -74,11 +69,11 @@ def update_output_panel(window, registers=False, yank=False):
 
 def clipboard_display(v, args=False):
     """Display selected clipboard content in panel or popup."""
+    mode = sets.get("display_mode")
 
-    sets = sublime.load_settings("clipboard_manager.sublime-settings")
-    panel = sets.get("display_mode") == "panel"
-    pup = sets.get("display_mode") == "popup"
-    status = sets.get("display_mode") == "status_bar"
+    panel = mode == "panel"
+    pup = mode == "popup"
+    status = mode == "status_bar"
 
     # showing in status bar
     if not pup and not panel:
@@ -86,33 +81,18 @@ def clipboard_display(v, args=False):
             HISTORY.show_in_status_bar()
         return
 
-    scheme = v.settings().get('color_scheme')
-    syntax = v.settings().get('syntax')
-
-    # find popup syntax, if popup is enabled
-    if pup:
-        syntax = ""
-        loc = v.sel()[0].b
-        supported = sets.get("popup_syntaxes")
-        for syn in supported:
-            if v.score_selector(loc, supported[syn]):
-                syntax = syn
-                break
+    (List, index) = args if args else (HISTORY, HISTORY.current_index())
+    syntax, scheme, codeblock_syn = List.clip_syntaxes[index]
 
     # calling a panel
-    if panel and args:
-        v.window().run_command('clipboard_manager_update_panel', {"args": args})
-        return
-
-    elif panel and not args:
-        args = scheme, syntax, HISTORY.current_index(), HISTORY
+    if panel:
+        args = scheme, syntax, index, List
         v.window().run_command('clipboard_manager_update_panel', {"args": args})
         return
 
     # showing popup instead
 
     if pup and args:
-        List, index = args[3], args[2]
         offset = sets.get('popup_vertical_offset')
         max = sets.get('max_quick_panel_items')
         limit = len(List) if len(List) < max else max
@@ -123,27 +103,26 @@ def clipboard_display(v, args=False):
         loc = v.layout_to_text((0, int((vis_a + vis_b) / 2 - mod_height)))
 
         st = List[index]
-        content = "```" + syntax + "\n" + (st[:350] + "\n...\n" if len(st) > 500 else st) + "\n```"
+        content = "```" + codeblock_syn + "\n" + (st[:350] + "\n...\n" if len(st) > 500 else st) + "\n```"
         popup(v, content, css=CSS, location=loc, max_width=2000)
     else:
         st = HISTORY.current()
-        content = "```" + syntax + "\n" + (st[:350] + "\n...\n" if len(st) > 500 else st) + "\n```"
+        content = "```" + codeblock_syn + "\n" + (st[:350] + "\n...\n" if len(st) > 500 else st) + "\n```"
         popup(v, content, css=CSS, location=loc, max_width=2000)
 
 # ============================================================================
 
 
 class HistoryList(list):
-    """
-    List type for storing the history.
-    Maintains a "pointer" to the current clipboard item
-    """
+    """List type for storing the history. Maintains a "pointer" to the current clipboard item."""
+
     registers = {}
     SIZE = 256
     __index = 0
-    last_current = None
+    clip_syntaxes = []
 
     def show(self, yank=False):
+        """Show history entries in output panel."""
         List = 'YANK' if yank else 'CLIPBOARD'
         ret = ""
         ret += " " + List + " HISTORY (%d)\n" % len(self)
@@ -161,6 +140,7 @@ class HistoryList(list):
         return ret
 
     def show_registers(self):
+        """Show registers in output panel."""
         ret = ""
         ret += " CLIPBOARD REGISTERS (%d)\n" % len(self.registers.items())
         ret += "=====================%s==\n" % ("=" * len(
@@ -174,6 +154,7 @@ class HistoryList(list):
         return ret
 
     def reset_register(self, what):
+        """Reset specific register."""
         numbers = "1234567890"
         letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 
@@ -188,6 +169,7 @@ class HistoryList(list):
                 self.registers[n] = ""
 
     def register(self, register, *args):
+        """Save in specific register."""
         if args:
             if len(args) == 1:
                 copy = args[0]
@@ -201,55 +183,73 @@ class HistoryList(list):
         else:
             return self.registers[register]
 
+    def clip_syntax(self):
+        """Store syntax/scheme for popup or panel display."""
+        view = sublime.active_window().active_view()
+        supported = sets.get("popup_syntaxes")
+        codeblock_syn = ''
+        for syn in supported:
+            if view.score_selector(0, supported[syn]):
+                codeblock_syn = syn
+                break
+        return (view.settings().get('syntax'), view.settings().get('color_scheme'), codeblock_syn)
+
     def append(self, item):
-        """
-        Appends to the history only if it isn't the current item.
-        """
-        if not self or self[self.__index] != item:
-            self.insert(0, item)
-            self.__index = 0
-            if len(self) > self.SIZE:
-                del self[self.SIZE:]
+        """Append to the history, or reposition item if already present."""
+        if self and item in self:
+            ix = self.index(item)
+            del self[ix]
+            del self.clip_syntaxes[ix]
+
+        self.insert(0, item)
+        self.clip_syntaxes.insert(0, self.clip_syntax())
+        self.__index = 0
+
+        # for some reason clip_syntaxes is updated twice!? correct this insult
+        if len(self.clip_syntaxes) > len(self):
+            del self.clip_syntaxes[0]
+
+        if len(self) > self.SIZE:
+            del self[-1]
+            del self.clip_syntaxes[-1]
 
     def current(self):
-        if len(self) == 0:
-            return None
-        return self[self.__index]
+        """Return item at current history index."""
+        return self[self.__index] if len(self) else None
 
     def current_index(self):
-        if len(self) == 0:
-            return None
-        return self.__index
+        """Return current history index."""
+        return self.__index if len(self) else None
 
     def at(self, idx):
+        """Reposition index."""
         self.__index = (idx if idx < len(self) else 0)
         self.status()
 
     def next(self):
+        """Reposition index to next item."""
         if self.__index > 0:
             self.__index -= 1
         self.status()
 
     def previous(self):
+        """Reposition index to previous item."""
         if self.__index < len(self) - 1:
             self.__index += 1
         self.status()
 
     def first(self):
-        """
-        "First" actually kind of means "last",since this is a FIFO stack.
-        """
+        """'first' actually kind of means 'last', since this is a FIFO stack."""
         self.__index = len(self) - 1
         self.status()
 
     def last(self):
-        """
-        "Last" actually kind of means "first", since this is a FIFO stack.
-        """
+        """'last' actually kind of means 'first', since this is a FIFO stack."""
         self.__index = 0
         self.status()
 
     def show_in_status_bar(self):
+        """Show current item in status bar."""
         copy = self.current()
         if copy:
             copy = copy.replace("\t", "\\t")
@@ -259,8 +259,8 @@ class HistoryList(list):
         else:
             sublime.status_message('Nothing in history')
 
-
     def status(self):
+        """Unclear."""
         copy = self.current()
         if copy:
             set_clip(self.current())
@@ -340,9 +340,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
         self.paste()
 
     def choice_panel(self, index):
-        scheme = self.view.settings().get('color_scheme')
-        syntax = self.view.settings().get('syntax')
-        args = scheme, syntax, index, self.List
+        args = self.List, index
         clipboard_display(self.view, args)
 
     def choose_and_paste(self, msg='Nothing in history'):
@@ -551,7 +549,7 @@ class ClipboardManagerListener(sublime_plugin.EventListener):
                 Vsl.process_command(Vsl, view)
             append_clipboard()
             update_output_panel(view.window())
-            # return "ClipboardManagerListener"
+            return "ClipboardManagerListener"
 
     def on_query_context(self, view, key, operator, operand, match_all):
 
