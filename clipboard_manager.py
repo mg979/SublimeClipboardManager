@@ -418,14 +418,14 @@ class ClipboardManager(sublime_plugin.TextCommand):
         clipboard_display(self.view)
 
     def paste_next(self):
-        """Paste next item."""
+        """Paste and select next item."""
         self.paste()
-        HISTORY.next()
+        self.next()
 
     def paste_previous(self):
-        """Paste previous item."""
-        HISTORY.previous()
+        """Paste and select previous item."""
         self.paste()
+        self.previous()
 
     def choice_panel(self, index):
         """Choice panel."""
