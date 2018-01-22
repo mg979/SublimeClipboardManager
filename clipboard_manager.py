@@ -732,7 +732,9 @@ class ClipboardManagerBuffer(sublime_plugin.TextCommand):
             return synhl(self.v, st, hl)
 
         def _text(c):
-            return c[:350] + "\n...\n" if len(c) > 500 else c
+            c = c[:350] + "\n...\n" if len(c) > 500 else c
+            c = "\t" + c.replace("\n", "\n\t")
+            return c
 
         # content for register
         if Cml.Buffer_register:
@@ -741,9 +743,9 @@ class ClipboardManagerBuffer(sublime_plugin.TextCommand):
                 self.v.insert(edit, sz(), r + '.\n')
                 if text:
                     self.v.insert(edit, sz(), _text(HISTORY.registers[r]))
-                    self.v.insert(edit, sz(), "-" * 55 + '\n')
+                    self.v.insert(edit, sz(), '\n' + "-" * 55 + '\n')
                 else:
-                    mdph(self.v, "clpman", sublime.Region(sz(), sz()), HISTORY.registers[r], sublime.LAYOUT_INLINE)
+                    mdph(self.v, "clpman", sublime.Region(sz(), sz()), _text(HISTORY.registers[r]), sublime.LAYOUT_INLINE)
                     self.v.insert(edit, sz(), '\n\n')
             return
 
