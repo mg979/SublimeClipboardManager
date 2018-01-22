@@ -4,7 +4,7 @@ import sublime_plugin
 import re
 from mdpopups import show_popup as mdpopup
 
-HISTORY, YANK = None, None
+HISTORY, YANK, YANK_MODE = None, None, False
 
 CSS = """
     .mdpopups div.highlight,
@@ -239,25 +239,38 @@ class HistoryList(object):
         """Append to the history, or reposition item if already present."""
         skip = False
 
-        if self.clips:
+        def insert_item(item):
+            self.__index = 0
+            if not skip:
+                self.clips.insert(0, item)
+                self.clip_syntaxes.insert(0, self.clip_syntax())
+
+            if len(self.clips) > self.max_clips:
+                del self.clips[-1]
+                del self.clip_syntaxes[-1]
+
+        if YANK_MODE:
+            v = sublime.active_window().active_view()
+            if self.clips and item == self.clips[0] and len(v.sel()) == 1:
+                skip = True
+            elif sets.get('yank_disjoin_multiple_cursors', False):
+                for sel in v.sel():
+                    substr = v.substr(sel)
+                    if substr:
+                        insert_item(substr)
+                return
+
+        # if allowing duplicates, only check the last clip
+
+        elif self.clips:
             if item == self.clips[0]:
                 skip = True
-            elif allow_history_duplicates or YANK_MODE:
-                # only check the last clip if allowing duplicates
-                ...
-            elif item in self.clips:
+            elif not allow_history_duplicates and item in self.clips:
                 ix = self.clips.index(item)
                 del self.clips[ix]
                 del self.clip_syntaxes[ix]
 
-        if not skip:
-            self.clips.insert(0, item)
-            self.clip_syntaxes.insert(0, self.clip_syntax())
-        self.__index = 0
-
-        if len(self.clips) > self.max_clips:
-            del self.clips[-1]
-            del self.clip_syntaxes[-1]
+        insert_item(item)
 
     def current(self):
         """Return item at current history index."""
@@ -341,10 +354,13 @@ class ClipboardManager(sublime_plugin.TextCommand):
             self.view.run_command('paste_and_indent')
         else:
             self.view.run_command('paste')
+
         if self.pop:
             ix = List.clips.index(clip)
             del List.clips[ix]
             del List.clip_syntaxes[ix]
+            if not List.clips:
+                inline_popup(msg)
 
         update_output_panel(self.view.window(), yank=yanking)
 
@@ -507,8 +523,7 @@ class ClipboardManagerYankMode(sublime_plugin.TextCommand):
         global YANK_MODE, YANK
 
         YANK_MODE = not YANK_MODE
-        msg = 'On' if YANK_MODE else 'Off'
-        sublime.status_message("  YANK MODE:  " + msg)
+        sublime.status_message("  YANK MODE:  " + ('On' if YANK_MODE else 'Off'))
 
         # clear yank list if manually exiting yank mode
         if not YANK_MODE and explicit_yank_mode:

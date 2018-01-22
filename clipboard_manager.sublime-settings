@@ -4,6 +4,8 @@
     "explicit_yank_mode": true,
     // exit yank mode automatically if yank stack has been consumed
     "end_yank_mode_on_emptied_stack": true,
+    // yank mode: disjoin multiple selections in individual clips
+    "yank_disjoin_multiple_cursors": true,
     // only checks the last copied content for equality
     // can improve performance if working with huge copied contents
     // yank mode always allows duplicates
