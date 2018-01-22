@@ -89,6 +89,7 @@ def inline_popup(content):
 
 def popup_content(st, syntax):
     """Format content for popup."""
+    syntax = syntax if st.count('\n') else ''
     return "```" + syntax + "\n" + (st[:350] + "\n...\n" if len(st) > 500 else st) + "\n```"
 
 
@@ -206,18 +207,12 @@ class HistoryList(object):
             for n in self.registers:
                 self.registers[n] = ""
 
-    def register(self, register, *args):
-        """Save in specific register."""
-        if args:
-            if len(args) == 1:
-                copy = args[0]
-            else:
-                copy = "\n".join(args)
-            self.registers[register] = copy
-            copy = copy.replace("\t", "\\t")
-            copy = copy.replace("\n", "\\n")
-            copy = copy.replace("\r", "\\r")
-            sublime.status_message('Set Clipboard Register "{0}" to "{1}"'.format(register, copy))
+    def register(self, register, st=None):
+        """Save to specific register, or retrieve from register."""
+        if st:
+            self.registers[register] = st
+            content = popup_content(st, self.clip_syntax()[2])
+            inline_popup('Set Clipboard Register "{0}" to:\n\n{1}'.format(register, content))
         else:
             return self.registers[register]
 
