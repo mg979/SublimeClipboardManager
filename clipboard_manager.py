@@ -82,7 +82,19 @@ def update_output_panel(window, registers=False, yank=False):
 def inline_popup(content):
     """Show message in popup at cursor."""
     v = sublime.active_window().active_view()
-    popup(v, content, css=INLINE, location=-1, max_width=2000)
+    show_popup(v, content)
+    # close open panels, if any
+    sublime.active_window().run_command('hide_panel')
+
+
+def popup_content(st, syntax):
+    """Format content for popup."""
+    return "```" + syntax + "\n" + (st[:350] + "\n...\n" if len(st) > 500 else st) + "\n```"
+
+
+def show_popup(v, content, loc=-1, css=INLINE):
+    """Show popup."""
+    popup(v, content, flags=sublime.HIDE_ON_MOUSE_MOVE_AWAY, css=css, location=loc, max_width=2000)
 
 # ============================================================================
 
@@ -115,6 +127,7 @@ def clipboard_display(v, args=False):
     # showing popup instead
 
     if pup and args:
+        # popup showed along with quick panel (choose&paste)
         offset = sets.get('popup_vertical_offset')
         max = sets.get('max_quick_panel_items')
         limit = len(List.clips) if len(List.clips) < max else max
@@ -125,12 +138,13 @@ def clipboard_display(v, args=False):
         loc = v.layout_to_text((0, int((vis_a + vis_b) / 2 - mod_height)))
 
         st = List.clips[index]
-        content = "```" + codeblock_syn + "\n" + (st[:350] + "\n...\n" if len(st) > 500 else st) + "\n```"
-        popup(v, content, css=CSS, location=loc, max_width=2000)
+        content = popup_content(st, codeblock_syn)
+        show_popup(v, content, loc, CSS)
     else:
+        # inline popup called when using previous/next in command mode
         st = HISTORY.current()
-        content = "```" + codeblock_syn + "\n" + (st[:350] + "\n...\n" if len(st) > 500 else st) + "\n```"
-        popup(v, content, css=CSS, location=loc, max_width=2000)
+        content = popup_content(st, codeblock_syn)
+        show_popup(v, content, css=CSS)
 
 # ============================================================================
 
@@ -436,13 +450,6 @@ class ClipboardManager(sublime_plugin.TextCommand):
         args = self.List, index
         clipboard_display(self.view, args)
 
-    def register(self, x):
-        """Register."""
-        if self.action == 'copy':
-            self.view.run_command("clipboard_manager_copy_to_register", {"register": x})
-        elif self.action == 'paste':
-            self.view.run_command('clipboard_manager_paste_from_register', {"register": x, "indent": self.indent})
-
     # ---------------------------------------------------------------------------
 
     def run(self, edit, **kwargs):
@@ -450,8 +457,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
         args = {"paste": self.paste, "yank": self.yank, "clear_yank_list": self.clear_yank_list,
                 "clear_history": self.clear_history, "next": self.next, "previous": self.previous,
                 "paste_next": self.paste_next, "paste_previous": self.paste_previous,
-                "choice_panel": self.choice_panel, "choose_and_paste": self.choose_and_paste,
-                "register": self.register}
+                "choice_panel": self.choice_panel, "choose_and_paste": self.choose_and_paste}
 
         if 'indent' in kwargs:
             self.indent = True
@@ -471,10 +477,6 @@ class ClipboardManager(sublime_plugin.TextCommand):
             return
         else:
             self.List = HISTORY
-
-        if 'register' in kwargs:
-            self.register(kwargs['register'])
-            return
 
         for arg in kwargs:
             args[arg]()
@@ -516,12 +518,16 @@ class ClipboardManagerUpdatePanel(sublime_plugin.TextCommand):
 
     def run(self, edit, args=False, close=False):
         """Run."""
+        w = sublime.active_window()
+
         if close:
-            self.view.window().destroy_output_panel('choose_and_paste')
+            w.destroy_output_panel('choose_and_paste')
             return
 
         scheme, syntax, index, clips = args
-        w = sublime.active_window()
+        # syntax is plain text if there are no new lines
+        syntax = syntax if clips[index].count('\n') else 'Packages/Text/Plain text.tmLanguage'
+
         v = w.create_output_panel('choose_and_paste')
         w.run_command("show_panel", {"panel": "output.choose_and_paste"})
         v.settings().set('syntax', syntax)
