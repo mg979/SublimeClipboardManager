@@ -105,12 +105,20 @@ def show_popup(v, content, loc=-1, css=INLINE):
     """Show popup."""
     mdpopup(v, content, flags=sublime.HIDE_ON_MOUSE_MOVE_AWAY, css=css, location=loc, max_width=2000)
 
+
+def hide_all():
+    """Hide popups/panels."""
+    sublime.active_window().active_view().hide_popup()
+    sublime.active_window().run_command('clipboard_manager_update_panel', {"close": True})
+
 # ============================================================================
 
 
 def clipboard_display(v, args=False):
     """Display selected clipboard content in panel or popup."""
-    mode, panel, popup = sets.get("display_mode"), False, False
+    panel, popup = False, False
+    mode = sets.get("display_mode") if not ClipboardManagerListener.command_mode \
+        else sets.get("command_mode_display_mode")
 
     if mode == "panel":
         panel = True
@@ -422,8 +430,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
                 self.paste(yanking)
             else:
                 List.at(0)
-            self.view.hide_popup()
-            self.view.window().run_command('clipboard_manager_update_panel', {"close": True})
+            hide_all()
 
         sublime.active_window().show_quick_panel(lines, on_done, 2, -1, self.choice_panel)
 
@@ -692,11 +699,12 @@ class ClipboardManagerListener(sublime_plugin.EventListener):
                 else:
                     ClipboardManagerListener.command_mode = False
                     view.erase_status("clip_man")
-                view.window().destroy_output_panel('choose_and_paste')
+                    hide_all()
                 return True
             else:
                 ClipboardManagerListener.command_mode = False
                 view.erase_status("clip_man")
+                hide_all()
         return None
 
 

@@ -13,6 +13,7 @@
 
     // valid modes are "popup", "panel", "status_bar", "none"
     "display_mode": "panel",
+    "command_mode_display_mode": "popup",
 
     // supported selectors for popup codeblocks syntax
     "popup_syntaxes": {

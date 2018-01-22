@@ -1,5 +1,5 @@
 [
-    // enter yank mode
+    // toggle yank mode
     { "keys": ["alt+y"],    "command": "clipboard_manager_yank_mode", "context": [{"key": "clip_man", "operator": "equal", "operand": "yank_mode"}] },
 
     // yank
