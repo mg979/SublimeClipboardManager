@@ -177,6 +177,12 @@ class HistoryList(object):
         self.__index = 0
         self.clip_syntaxes = []
 
+    def __reset__(self):
+        """Reset history, keeping registers."""
+        self.clips = []
+        self.clip_syntaxes = []
+        self.__index = 0
+
     def show(self, yank=False):
         """Show history entries in output panel."""
         title = 'YANK' if yank else 'CLIPBOARD'
@@ -364,6 +370,9 @@ class ClipboardManager(sublime_plugin.TextCommand):
         else:
             self.view.run_command('paste')
 
+        self.view.show_at_center(self.view.sel()[-1].b)
+        hide_all()
+
         if self.pop:
             ix = List.clips.index(clip)
             del List.clips[ix]
@@ -446,7 +455,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
     def clear_history(self):
         """Clear history."""
         global HISTORY
-        HISTORY = HistoryList()
+        HISTORY.__reset__()
         sublime.status_message('Clipboard history cleared')
         inline_popup('Clipboard history cleared')
 
@@ -524,7 +533,7 @@ class ClipboardManagerCommandMode(sublime_plugin.TextCommand):
 
 
 class ClipboardManagerYankMode(sublime_plugin.TextCommand):
-    """Set yank mode."""
+    """Toggle yank mode."""
 
     def run(self, edit):
         """Run."""
@@ -776,8 +785,18 @@ class ClipboardManagerListener(sublime_plugin.EventListener):
     just_run = False
     command_mode = False
 
+    def deactivate_command_mode(self, view):
+        """Deactivate command mode."""
+        ClipboardManagerListener.command_mode = False
+        view.erase_status("clip_man")
+        hide_all()
+
     def on_text_command(self, view, command_name, args):
         """on_text_command event."""
+        if ClipboardManagerListener.command_mode:
+            if "clipboard_manager" not in command_name:
+                self.deactivate_command_mode(view)
+
         if self.just_run:
             self.just_run = False
 
@@ -801,14 +820,10 @@ class ClipboardManagerListener(sublime_plugin.EventListener):
                 if operator == sublime.OP_EQUAL and operand == "non_stop":
                     pass
                 else:
-                    ClipboardManagerListener.command_mode = False
-                    view.erase_status("clip_man")
-                    hide_all()
+                    self.deactivate_command_mode(view)
                 return True
             else:
-                ClipboardManagerListener.command_mode = False
-                view.erase_status("clip_man")
-                hide_all()
+                self.deactivate_command_mode(view)
         return None
 
 
