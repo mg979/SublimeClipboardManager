@@ -23,6 +23,10 @@
                         "ruby": ["source.ruby"],
                     },
 
+    // valid modes are "panel", "buffer"
+    "show_records": "buffer",
+    "show_records_scheme": "Packages/Color Scheme - Default/Mariana.tmTheme",
+
     // -----------------------------------------------------
     // Popup positioning
 

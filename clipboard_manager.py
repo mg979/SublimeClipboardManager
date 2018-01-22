@@ -2,7 +2,7 @@
 import sublime
 import sublime_plugin
 import re
-from mdpopups import show_popup as mdpopup
+from mdpopups import show_popup as mdpopup, add_phantom as mdph, syntax_highlight as synhl
 
 HISTORY, YANK, YANK_MODE = None, None, False
 
@@ -581,14 +581,23 @@ class ClipboardManagerRegister(sublime_plugin.TextCommand):
     def paste(self, s):
         """Paste from register."""
         if s in HISTORY.registers:
-            sublime.active_window().status_message("Pasted register " + s)
+            sublime.active_window().status_message("   Pasted register " + s)
             set_clip(HISTORY.register(s))
             if self.indent:
                 self.view.run_command('paste_and_indent')
             else:
                 self.view.run_command('paste')
         else:
-            sublime.active_window().status_message("Not a valid register")
+            sublime.active_window().status_message("   Not a valid register")
+
+    def set_clip(self, s):
+        """Set to clipboard."""
+        if s in HISTORY.registers:
+            sublime.active_window().status_message("   Clipboard set to register '" + s + "'")
+            set_clip(HISTORY.register(s))
+        else:
+            sublime.active_window().status_message("   Not a valid register")
+        self.view.close()
 
     def on_change(self, s):
         """Execute on valid entered character."""
@@ -601,24 +610,26 @@ class ClipboardManagerRegister(sublime_plugin.TextCommand):
 
         w = sublime.active_window()
         if s not in chars:
-            w.status_message("Not a valid key.")
+            w.status_message("   Not a valid key.")
             w.run_command('hide_panel')
             return
         elif self.mode == "copy":
             self.copy(s)
         elif self.mode == "paste":
             self.paste(s)
+        elif self.mode == "set":
+            self.set_clip(s)
         w.run_command('hide_panel')
 
     def run(self, edit, mode='copy', indent=False, reset='letters'):
         """Run."""
-        msg = ('Register in registers key?', 'Paste from registers key?')
+        msg = ('  Register in registers key?', '  Paste from registers key?', '  Set clipboard to registers key?')
 
         if mode == "reset":
             HISTORY.reset_register(reset)
             return
 
-        msg = msg[0] if mode == 'copy' else msg[1]
+        msg = msg[0] if mode == 'copy' else msg[1] if mode == 'paste' else msg[2]
         sublime.active_window().status_message(msg)
         self.indent, self.mode = indent, mode
 
@@ -629,21 +640,114 @@ class ClipboardManagerRegister(sublime_plugin.TextCommand):
 
 
 class ClipboardManagerShow(sublime_plugin.WindowCommand):
-    """Show history in output panel."""
+    """Show history or registers in output panel or buffer."""
 
-    def run(self, yank=False):
+    def run(self, yank=False, register=False):
         """Run."""
-        self.window.run_command('show_panel', {'panel': 'output.clipboard_manager'})
-        update_output_panel(self.window, yank=yank)
+        if sets.get('show_records', "panel") == "panel":
+            self.window.run_command('show_panel', {'panel': 'output.clipboard_manager'})
+            if register:
+                update_output_panel(self.window, True)
+            else:
+                update_output_panel(self.window, yank=yank)
+        else:
+            self.window.run_command('clipboard_manager_buffer', {'yank': yank, 'register': register})
 
 
-class ClipboardManagerShowRegisters(sublime_plugin.WindowCommand):
-    """Show registers in output panel."""
+class ClipboardManagerBuffer(sublime_plugin.TextCommand):
+    """Render clipboard history in a buffer."""
 
-    def run(self):
+    def create_view(self, edit, register, yank):
+        """Create buffer and set attributes."""
+        Cml = ClipboardManagerListener
+        Cml.Buffer_list = HISTORY if not yank else YANK
+        _list = '\nREGISTERS' if register else '\nCLIPBOARD HISTORY' if not yank else '\nYANK HISTORY'
+
+        v = self.v = sublime.active_window().new_file()
+        v.set_name(_list[1:])
+        v.set_scratch(True)
+        v.set_syntax_file('Packages/Clipboard Manager/clipman_buffer.sublime-syntax')
+        v.settings().set('color_scheme', sets.get('show_records_scheme'))
+        v.settings().set('font_size', 8)
+        v.settings().set("line_padding_bottom", 0)
+        v.settings().set("line_padding_top", 0)
+
+        # header
+        post = '\n   [q] Close view   [c] Set clipboard   [t] Text mode'
+        header = _list + '\n\n' + post + '\n' + '-' * 55 + '\n\n'
+        v.insert(edit, 0, header)
+
+    def copy_input(self, n):
+        """Input for clipboard entry."""
+        Cml = ClipboardManagerListener
+
+        try:
+            if int(n) < len(Cml.Buffer_list.clips):
+                Cml.Buffer_list.at(int(n))
+                Cml.Buffer_list.status()
+                sublime.status_message("    Set clipboard to entry n." + n)
+            else:
+                sublime.status_message("    Entry n." + n + " doesn't exist.")
+            self.view.close()
+        except (TypeError, ValueError):
+            sublime.status_message("    You entered a wrong value.")
+            self.view.close()
+
+    def run(self, edit, register=False, yank=False, action=False):
         """Run."""
-        self.window.run_command('show_panel', {'panel': 'output.clipboard_manager'})
-        update_output_panel(self.window, True)
+        Cml, text = ClipboardManagerListener, False
+
+        if action == "text":
+            self.view.close()
+            text = True
+        elif action == "quit":
+            self.view.close()
+            return
+        elif action == "copy" and Cml.Buffer_register:
+            sublime.active_window().run_command('clipboard_manager_register', {'mode': 'set'})
+            return
+        elif action == "copy":
+            sublime.active_window().show_input_panel('Enter an entry:', '', self.copy_input, None, None)
+            return
+
+        self.create_view(edit, register, yank)
+        Cml.Buffer_register = register
+
+        def sz():
+            return self.v.size()
+
+        def _clip(c):
+            st = c[:350] + "\n...\n" if len(c) > 500 else c
+            hl = Cml.Buffer_list.clip_syntaxes[n][2] if Cml.Buffer_list.clip_syntaxes[n][2] else 'text'
+            return synhl(self.v, st, hl)
+
+        def _text(c):
+            return c[:350] + "\n...\n" if len(c) > 500 else c
+
+        # content for register
+        if register:
+            for r in HISTORY.registers:
+                self.v.insert(edit, sz(), r + '.\n')
+                if text:
+                    self.v.insert(edit, sz(), _text(HISTORY.registers[r]))
+                    self.v.insert(edit, sz(), "-" * 55 + '\n')
+                else:
+                    mdph(self.v, "clpman", sublime.Region(sz(), sz()),
+                         _clip(HISTORY.registers[r]), sublime.LAYOUT_INLINE)
+                    self.v.insert(edit, sz(), '\n\n')
+            return
+
+        # content for histories
+        for n, c in enumerate(Cml.Buffer_list.clips):
+            self.v.insert(edit, sz(), str(n) + '.\n')
+            if text:
+                self.v.insert(edit, sz(), _text(c))
+                self.v.insert(edit, sz(), "-" * 55 + '\n')
+            else:
+                mdph(self.v, "clpman", sublime.Region(sz(), sz()), _clip(c), sublime.LAYOUT_INLINE)
+                self.v.insert(edit, sz(), '\n\n')
+
+        self.v.set_read_only(True)
 
 
 class ClipboardManagerEdit(sublime_plugin.TextCommand):

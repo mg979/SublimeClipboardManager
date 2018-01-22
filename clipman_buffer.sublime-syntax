@@ -1,0 +1,9 @@
+%YAML 1.2
+---
+# See http://www.sublimetext.com/docs/3/syntax.html
+scope: clipman-buffer
+hidden: true
+
+contexts:
+  main:
+    - match: .*
