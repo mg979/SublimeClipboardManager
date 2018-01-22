@@ -719,8 +719,9 @@ class ClipboardManagerBuffer(sublime_plugin.TextCommand):
             sublime.active_window().show_input_panel('Enter an entry:', '', self.copy_input, None, None)
             return
 
-        self.create_view(edit, register, yank)
-        Cml.Buffer_register = register
+        if not text:
+            Cml.Buffer_register = register
+        self.create_view(edit, Cml.Buffer_register, yank)
 
         def sz():
             return self.v.size()
@@ -734,15 +735,15 @@ class ClipboardManagerBuffer(sublime_plugin.TextCommand):
             return c[:350] + "\n...\n" if len(c) > 500 else c
 
         # content for register
-        if register:
-            for r in HISTORY.registers:
+        if Cml.Buffer_register:
+            regs = sorted(r for r in HISTORY.registers)
+            for r in regs:
                 self.v.insert(edit, sz(), r + '.\n')
                 if text:
                     self.v.insert(edit, sz(), _text(HISTORY.registers[r]))
                     self.v.insert(edit, sz(), "-" * 55 + '\n')
                 else:
-                    mdph(self.v, "clpman", sublime.Region(sz(), sz()),
-                         _clip(HISTORY.registers[r]), sublime.LAYOUT_INLINE)
+                    mdph(self.v, "clpman", sublime.Region(sz(), sz()), HISTORY.registers[r], sublime.LAYOUT_INLINE)
                     self.v.insert(edit, sz(), '\n\n')
             return
 
