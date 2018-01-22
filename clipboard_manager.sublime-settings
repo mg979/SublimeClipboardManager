@@ -14,12 +14,16 @@
     // valid modes are "popup", "panel", "status_bar", "none"
     "display_mode": "panel",
 
-    // supported selectors for popup syntax
-    // same identifiers as per github markdown codeblocks
+    // supported selectors for popup codeblocks syntax
     "popup_syntaxes": {
-                        "python": "source.python",
-                        "sh": "source.shell",
+                        "python": ["source.python"],
+                        "sh": ["source.shell"],
+                        "c_cpp": ["source.c++", "source.c"],
+                        "ruby": ["source.ruby"],
                     },
+
+    // -----------------------------------------------------
+    // Popup positioning
 
     // depending on your theme, you may want to adjust this for a better
     // alignment of the popup when choosing from the quick panel

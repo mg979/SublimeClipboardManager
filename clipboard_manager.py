@@ -230,9 +230,10 @@ class HistoryList(object):
         supported = sets.get("popup_syntaxes")
         codeblock_syn = ''
         for syn in supported:
-            if view.score_selector(0, supported[syn]):
-                codeblock_syn = syn
-                break
+            for s in supported[syn]:
+                if view.score_selector(0, s):
+                    codeblock_syn = syn
+                    break
         return (view.settings().get('syntax'), view.settings().get('color_scheme'), codeblock_syn)
 
     def append(self, item):
