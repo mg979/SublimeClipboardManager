@@ -44,4 +44,9 @@
     { "keys": ["1"],               "command": "clipboard_manager_show_registers",                  "context": [{"key": "clip_man"}]},
     { "keys": ["2"],               "command": "clipboard_manager_show",                            "context": [{"key": "clip_man"}]},
     { "keys": ["3"],               "command": "clipboard_manager_show", "args": {"yank": true},    "context": [{"key": "clip_man"}]},
+
+    // buffers
+    { "keys": ["q"],               "command": "clipboard_manager_buffer", "args": {"action": "quit"}, "context": [{"key": "selector", "operator": "equal", "operand": "clipman-buffer"}]},
+    { "keys": ["c"],               "command": "clipboard_manager_buffer", "args": {"action": "copy"}, "context": [{"key": "selector", "operator": "equal", "operand": "clipman-buffer"}]},
+    { "keys": ["t"],               "command": "clipboard_manager_buffer", "args": {"action": "text"}, "context": [{"key": "selector", "operator": "equal", "operand": "clipman-buffer"}]},
 ]
