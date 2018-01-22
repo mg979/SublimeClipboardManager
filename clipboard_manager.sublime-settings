@@ -4,8 +4,12 @@
     "explicit_yank_mode": true,
     // exit yank mode automatically if yank stack has been consumed
     "end_yank_mode_on_emptied_stack": true,
+    // only checks the last copied content for equality
+    // can improve performance if working with huge copied contents
+    // yank mode always allows duplicates
+    "allow_history_duplicates": false,
 
-    // valid modes are "popup", "panel" or "status_bar"
+    // valid modes are "popup", "panel", "status_bar", "none"
     "display_mode": "panel",
 
     // supported selectors for popup syntax
@@ -25,6 +29,7 @@
     // 150/8 for modern themes
 
     "popup_vertical_offset": 0,
-    // max quick panel visible items for the theme
+    // approximate quick panel visible items for the current theme
+    // used to adjust popup position
     "max_quick_panel_items": 13
 }

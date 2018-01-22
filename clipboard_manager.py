@@ -2,7 +2,7 @@
 import sublime
 import sublime_plugin
 import re
-from mdpopups import show_popup as popup
+from mdpopups import show_popup as mdpopup
 
 HISTORY, YANK = None, None
 
@@ -26,9 +26,11 @@ INLINE = """
 
 def plugin_loaded():
     """On restart."""
-    global HISTORY, YANK, YANK_MODE, Vsl, sets, explicit_yank_mode
+    global HISTORY, YANK, YANK_MODE
+    global Vsl, sets, explicit_yank_mode, allow_history_duplicates
 
     sets = sublime.load_settings("clipboard_manager.sublime-settings")
+    sets.add_on_change('clipboard_manager', on_settings_change)
 
     try:
         from VirtualSpace.VirtualSpace import VirtualSpaceListener as Vsl
@@ -36,25 +38,31 @@ def plugin_loaded():
         Vsl = False
 
     HISTORY = HistoryList()
+    HISTORY.append(get_clip())
     YANK = HistoryList()
 
     explicit_yank_mode = sets.get('explicit_yank_mode', False)
+    allow_history_duplicates = sets.get('allow_history_duplicates', False)
     # allow copying to yank list already, if explicit mode is off
     YANK_MODE = not explicit_yank_mode
 
 # ============================================================================
 
 
+def on_settings_change():
+    """Update settings."""
+    global explicit_yank_mode, allow_history_duplicates
+    explicit_yank_mode = sets.get('explicit_yank_mode', False)
+    allow_history_duplicates = sets.get('allow_history_duplicates', False)
+
+
 def get_clip():
-    """Try to deal with stubborn clipboard refusing to open."""
-    clip = None
-    while not clip:
-        clip = sublime.get_clipboard()
-    return clip
+    """Get clipboard content."""
+    return sublime.get_clipboard()
 
 
 def set_clip(s):
-    """Try to deal with stubborn clipboard refusing to open."""
+    """Set clipboard content."""
     while s != get_clip():
         sublime.set_clipboard(s)
 
@@ -95,23 +103,23 @@ def popup_content(st, syntax):
 
 def show_popup(v, content, loc=-1, css=INLINE):
     """Show popup."""
-    popup(v, content, flags=sublime.HIDE_ON_MOUSE_MOVE_AWAY, css=css, location=loc, max_width=2000)
+    mdpopup(v, content, flags=sublime.HIDE_ON_MOUSE_MOVE_AWAY, css=css, location=loc, max_width=2000)
 
 # ============================================================================
 
 
 def clipboard_display(v, args=False):
     """Display selected clipboard content in panel or popup."""
-    mode = sets.get("display_mode")
+    mode, panel, popup = sets.get("display_mode"), False, False
 
-    panel = mode == "panel"
-    pup = mode == "popup"
-    status = mode == "status_bar"
-
-    # showing in status bar
-    if not pup and not panel:
-        if status:
-            HISTORY.show_in_status_bar()
+    if mode == "panel":
+        panel = True
+    elif mode == "popup":
+        popup = True
+    elif mode == "status_bar":
+        HISTORY.show_in_status_bar()
+        return
+    else:
         return
 
     (List, index) = args if args else (HISTORY, HISTORY.current_index())
@@ -127,7 +135,7 @@ def clipboard_display(v, args=False):
 
     # showing popup instead
 
-    if pup and args:
+    if popup and args:
         # popup showed along with quick panel (choose&paste)
         offset = sets.get('popup_vertical_offset')
         max = sets.get('max_quick_panel_items')
@@ -229,13 +237,22 @@ class HistoryList(object):
 
     def append(self, item):
         """Append to the history, or reposition item if already present."""
-        if self.clips and item in self.clips:
-            ix = self.clips.index(item)
-            del self.clips[ix]
-            del self.clip_syntaxes[ix]
+        skip = False
 
-        self.clips.insert(0, item)
-        self.clip_syntaxes.insert(0, self.clip_syntax())
+        if self.clips:
+            if item == self.clips[0]:
+                skip = True
+            elif allow_history_duplicates or YANK_MODE:
+                # only check the last clip if allowing duplicates
+                ...
+            elif item in self.clips:
+                ix = self.clips.index(item)
+                del self.clips[ix]
+                del self.clip_syntaxes[ix]
+
+        if not skip:
+            self.clips.insert(0, item)
+            self.clip_syntaxes.insert(0, self.clip_syntax())
         self.__index = 0
 
         if len(self.clips) > self.max_clips:
@@ -252,7 +269,7 @@ class HistoryList(object):
 
     def at(self, idx):
         """Reposition index."""
-        self.__index = (idx if idx < len(self.clips) else 0)
+        self.__index = (idx if idx < len(self.clips) else 0 if self.clips else None)
         self.status()
 
     def next(self):
@@ -375,32 +392,23 @@ class ClipboardManager(sublime_plugin.TextCommand):
         def format(line):
             return line.replace('\n', '\\n')[:64]
 
-        msg = 'Nothing in history' if not yanking else 'Nothing in yank stack'
         List = self.List
         if not len(List.clips):
-            inline_popup(msg)
+            inline_popup('Nothing in history')
             return
-        lines = []
-        line_map = {}
-        # filter out duplicates, keeping the first instance, and format
-        for i, line in enumerate(List.clips):
-            if i == List.clips.index(line):
-                line_map[len(lines)] = i
-                lines.append(format(line))
+        lines = [format(clip) for clip in List.clips]
 
         def on_done(idx):
             if idx >= 0:
-                idx = line_map[idx]
                 self.idx = idx
                 List.at(idx)
                 self.paste(yanking)
+            else:
+                List.at(0)
             self.view.hide_popup()
             self.view.window().run_command('clipboard_manager_update_panel', {"close": True})
 
-        if lines:
-            sublime.active_window().show_quick_panel(lines, on_done, 2, -1, self.choice_panel)
-        else:
-            inline_popup(msg)
+        sublime.active_window().show_quick_panel(lines, on_done, 2, -1, self.choice_panel)
 
     # ---------------------------------------------------------------------------
 
@@ -442,6 +450,7 @@ class ClipboardManager(sublime_plugin.TextCommand):
 
     def choice_panel(self, index):
         """Choice panel."""
+        self.List.at(index)
         args = self.List, index
         clipboard_display(self.view, args)
 
