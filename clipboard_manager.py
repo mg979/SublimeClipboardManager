@@ -482,15 +482,30 @@ class ClipboardManager(sublime_plugin.TextCommand):
         update_output_panel(self.view.window())
         clipboard_display(self.view)
 
-    def paste_next(self):
+    def previous_and_paste(self):
+        """Select next item and paste."""
+        self.previous()
+        self.paste()
+
+    def next_and_paste(self):
+        """Select previous item and paste."""
+        self.next()
+        self.paste()
+
+    def paste_and_next(self):
         """Paste and select next item."""
         self.paste()
         self.next()
 
-    def paste_previous(self):
+    def paste_and_previous(self):
         """Paste and select previous item."""
         self.paste()
         self.previous()
+
+    def paste_and_display(self):
+        """Paste and keep displaying popup/panel."""
+        self.paste()
+        clipboard_display(self.view)
 
     def choice_panel(self, index):
         """Choice panel."""
@@ -504,8 +519,10 @@ class ClipboardManager(sublime_plugin.TextCommand):
         """Run."""
         args = {"paste": self.paste, "yank": self.yank, "clear_yank_list": self.clear_yank_list,
                 "clear_history": self.clear_history, "next": self.next, "previous": self.previous,
-                "paste_next": self.paste_next, "paste_previous": self.paste_previous,
-                "choice_panel": self.choice_panel, "choose_and_paste": self.choose_and_paste}
+                "paste_and_next": self.paste_and_next, "paste_and_previous": self.paste_and_previous,
+                "next_and_paste": self.next_and_paste, "previous_and_paste": self.previous_and_paste,
+                "choice_panel": self.choice_panel, "choose_and_paste": self.choose_and_paste,
+                "paste_and_display": self.paste_and_display}
 
         if 'indent' in kwargs:
             self.indent = True
@@ -936,9 +953,11 @@ class ClipboardManagerListener(sublime_plugin.EventListener):
 
     def on_text_command(self, view, command_name, args):
         """on_text_command event."""
-        if ClipboardManagerListener.command_mode:
-            if "clipboard_manager" not in command_name:
+        if "clipboard_manager" not in command_name:
+            if ClipboardManagerListener.command_mode:
                 self.deactivate_command_mode(view)
+            elif sublime.active_window().get_output_panel('choose_and_paste'):
+                hide_all()
 
         if self.just_run:
             self.just_run = False
