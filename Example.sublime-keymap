@@ -1,10 +1,14 @@
 [
-    // toggle yank mode
+    // toggle yank mode (needs explicit_yank_mode in settings)
     { "keys": ["alt+y"],                 "command": "clipboard_manager_yank_mode", "context": [{"key": "clip_man", "operator": "equal", "operand": "yank_mode"}] },
 
-    // yank, paste next/previous
+    // yank
     { "keys": ["ctrl+y"],                "args": {"yank": true},                                 "command": "clipboard_manager" },
     { "keys": ["ctrl+shift+y"],          "args": {"yank": true, "indent": true},                 "command": "clipboard_manager" },
+
+    // next/previous
+    { "keys": ["alt+,"],                 "args": {"previous": true},                             "command": "clipboard_manager" },
+    { "keys": ["alt+."],                 "args": {"next": true},                                 "command": "clipboard_manager" },
     { "keys": ["alt+ctrl+,"],            "args": {"previous_and_paste": true},                   "command": "clipboard_manager" },
     { "keys": ["alt+ctrl+."],            "args": {"next_and_paste": true},                       "command": "clipboard_manager" },
     { "keys": ["alt+ctrl+shift+,"],      "args": {"previous_and_paste": true, "indent": true},   "command": "clipboard_manager" },
