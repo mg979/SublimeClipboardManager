@@ -1,10 +1,15 @@
 """Sublime Clipboard Manager."""
 import sublime
 import sublime_plugin
+import os
 import re
+import json
 from mdpopups import show_popup as mdpopup, add_phantom as mdph, syntax_highlight as synhl
 
 HISTORY, YANK, YANK_MODE = None, None, False
+numbers = "1234567890"
+lettersl = "abcdefghijklmnopqrstuvwxyz"
+lettersu = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 CSS = """
     .mdpopups div.highlight,
@@ -27,11 +32,11 @@ INLINE = """
 def plugin_loaded():
     """On restart."""
     global HISTORY, YANK, YANK_MODE
-    global Vsl, sets, explicit_yank_mode, allow_history_duplicates
+    global Vsl, sets, explicit_yank_mode, allow_history_duplicates, reg_json
 
     sets = sublime.load_settings("clipboard_manager.sublime-settings")
     sets.add_on_change('clipboard_manager', on_settings_change)
-
+    reg_json = os.path.join(sublime.packages_path(), "User", "clipman_registers.json")
     try:
         from VirtualSpace.VirtualSpace import VirtualSpaceListener as Vsl
     except ImportError:
@@ -40,6 +45,13 @@ def plugin_loaded():
     HISTORY = HistoryList()
     HISTORY.append(get_clip())
     YANK = HistoryList()
+
+    if sets.get('import_registers', False):
+        if not os.path.isfile(reg_json):
+            with open(reg_json, 'w') as f:
+                json.dump({}, f)
+        else:
+            HISTORY.registers = json.load(open(reg_json))
 
     explicit_yank_mode = sets.get('explicit_yank_mode', False)
     allow_history_duplicates = sets.get('allow_history_duplicates', False)
@@ -216,18 +228,17 @@ class HistoryList(object):
 
     def reset_register(self, what):
         """Reset specific register."""
-        numbers = "1234567890"
-        letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
-
         if what == "numbers":
             for n in numbers:
                 self.registers[n] = ""
-        elif what == "letters":
-            for n in letters:
+        elif what == "lettersl":
+            for n in lettersl:
+                self.registers[n] = ""
+        elif what == "lettersu":
+            for n in lettersu:
                 self.registers[n] = ""
         else:
-            for n in self.registers:
-                self.registers[n] = ""
+            self.registers = {}
 
     def register(self, register, st=None):
         """Save to specific register, or retrieve from register."""
@@ -579,6 +590,135 @@ class ClipboardManagerUpdatePanel(sublime_plugin.TextCommand):
 class ClipboardManagerRegister(sublime_plugin.TextCommand):
     """Copy to or paste from register."""
 
+    def options(self):
+        """Backup options."""
+        items = [['Export', 'Save current registers to file'],
+                 ['Import', 'Restore register keys from file'],
+                 ['Erase', 'Erase selected register keys from file'],
+                 ['Reset', 'Reset selected register keys from current memory'],
+                 ['Edit', 'Open file for manual edits'],
+                 ['Delete', 'Delete file permanently']]
+
+        def on_done(ix):
+            if ix == 0:
+                self.export_to()
+            elif ix == 1:
+                self.import_from()
+            elif ix == 2:
+                self.erase()
+            elif ix == 3:
+                self.reset()
+            elif ix == 4:
+                sublime.active_window().open_file(reg_json)
+            elif ix == 5:
+                os.remove(reg_json)
+
+        sublime.active_window().show_quick_panel(items, on_done)
+
+    def export_to(self):
+        """Export selected registers to json file."""
+        items = [['All', 'Export all registers'],
+                 ['Numbers', 'Export only numeric registers'],
+                 ['Letters (a-z)', 'Export only lowercase literal registers'],
+                 ['Letters (A-Z)', 'Export only uppercase literal registers']]
+
+        if not sets.get('import_registers', False):
+            sublime.status_message("   Attention: Import from file is currently disabled.")
+
+        data = HISTORY.registers
+        nums = {n: data[n] for n in data if n in numbers and data[n]}
+        letsL = {l: data[l] for l in data if l in lettersl and data[l]}
+        letsU = {l: data[l] for l in data if l in lettersu and data[l]}
+        _all = nums.copy()
+        _all.update(letsL)
+        _all.update(letsU)
+
+        def on_done(ix):
+            if ix == 0:
+                json.dump(_all, open(reg_json, 'w'), indent=2)
+            elif ix == 1:
+                json.dump(nums, open(reg_json, 'w'), indent=2)
+            elif ix == 2:
+                json.dump(letsL, open(reg_json, 'w'), indent=2)
+            elif ix == 3:
+                json.dump(letsU, open(reg_json, 'w'), indent=2)
+
+        sublime.active_window().show_quick_panel(items, on_done)
+
+    def import_from(self):
+        """Import selected registers from json file."""
+        items = [['All', 'Import all registers'],
+                 ['Numbers', 'Import only numeric registers'],
+                 ['Letters (a-z)', 'Import only lowercase literal registers'],
+                 ['Letters (A-Z)', 'Import only uppercase literal registers']]
+
+        if not sets.get('import_registers', False):
+            sublime.status_message("   Attention: Import from file is currently disabled.")
+
+        data = json.load(open(reg_json))
+        nums = {n: data[n] for n in data if n in numbers and data[n]}
+        letsL = {l: data[l] for l in data if l in lettersl and data[l]}
+        letsU = {l: data[l] for l in data if l in lettersu and data[l]}
+
+        def on_done(ix):
+            if ix == 0:
+                HISTORY.registers.update(nums)
+                HISTORY.registers.update(letsL)
+                HISTORY.registers.update(letsU)
+            elif ix == 1:
+                HISTORY.registers.update(nums)
+            elif ix == 2:
+                HISTORY.registers.update(letsL)
+            elif ix == 3:
+                HISTORY.registers.update(letsU)
+
+        sublime.active_window().show_quick_panel(items, on_done)
+
+    def erase(self):
+        """Erase selected register keys from file."""
+        items = [['All', 'Erase all registers'],
+                 ['Numbers', 'Erase only numeric registers'],
+                 ['Letters (a-z)', 'Erase only lowercase literal registers'],
+                 ['Letters (A-Z)', 'Erase only uppercase literal registers']]
+
+        if not sets.get('import_registers', False):
+            sublime.status_message("   Attention: Import from file is currently disabled.")
+
+        def on_done(ix):
+            if ix >= 0:
+                data = json.load(open(reg_json))
+                if ix == 0:
+                    data = {}
+                elif ix == 1:
+                    data = {n: data[n] for n in data if n not in numbers}
+                elif ix == 2:
+                    data = {l: data[l] for l in data if l not in lettersl}
+                elif ix == 3:
+                    data = {l: data[l] for l in data if l not in lettersu}
+                with open(reg_json, 'w') as f:
+                    json.dump(data, f, indent=2)
+
+        sublime.active_window().show_quick_panel(items, on_done)
+
+    def reset(self):
+        """Reset selected register keys from memory."""
+        items = [['All', 'Reset all registers'],
+                 ['Numbers', 'Reset only numeric registers'],
+                 ['Letters (a-z)', 'Reset only lowercase literal registers'],
+                 ['Letters (A-Z)', 'Reset only uppercase literal registers']]
+
+        def on_done(ix):
+            if ix == 0:
+                HISTORY.reset_register("all")
+            elif ix == 1:
+                HISTORY.reset_register("numbers")
+            elif ix == 2:
+                HISTORY.reset_register("lettersl")
+            elif ix == 3:
+                HISTORY.reset_register("lettersu")
+
+        sublime.active_window().show_quick_panel(items, on_done)
+
     def copy(self, s):
         """Copy to register."""
         self.view.run_command('copy')
@@ -614,8 +754,7 @@ class ClipboardManagerRegister(sublime_plugin.TextCommand):
             return
 
         s = s[0]
-        chars = "abcdefghijklmnopqrstuvwxyz" + \
-                "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+        chars = numbers + lettersl + lettersu
 
         w = sublime.active_window()
         if s not in chars:
@@ -634,8 +773,8 @@ class ClipboardManagerRegister(sublime_plugin.TextCommand):
         """Run."""
         msg = ('  Register in registers key?', '  Paste from registers key?', '  Set clipboard to registers key?')
 
-        if mode == "reset":
-            HISTORY.reset_register(reset)
+        if mode == "options":
+            self.options()
             return
 
         msg = msg[0] if mode == 'copy' else msg[1] if mode == 'paste' else msg[2]
@@ -745,7 +884,8 @@ class ClipboardManagerBuffer(sublime_plugin.TextCommand):
                     self.v.insert(edit, sz(), _text(HISTORY.registers[r]))
                     self.v.insert(edit, sz(), '\n' + "-" * 55 + '\n')
                 else:
-                    mdph(self.v, "clpman", sublime.Region(sz(), sz()), _text(HISTORY.registers[r]), sublime.LAYOUT_INLINE)
+                    loc = sublime.Region(sz(), sz())
+                    mdph(self.v, "clpman", loc, _text(HISTORY.registers[r]), sublime.LAYOUT_INLINE)
                     self.v.insert(edit, sz(), '\n\n')
             return
 

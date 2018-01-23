@@ -6,8 +6,9 @@
     "end_yank_mode_on_emptied_stack": true,
     // yank mode: disjoin multiple selections in individual clips
     "yank_disjoin_multiple_cursors": true,
-    // only checks the last copied content for equality
+    // "true" will only check the last copied content for equality
     // can improve performance if working with huge copied contents
+    // "false" will cause repositioning of clips, if the same is found
     // yank mode always allows duplicates
     "allow_history_duplicates": false,
 
@@ -26,6 +27,10 @@
     // valid modes are "panel", "buffer"
     "show_records": "buffer",
     "show_records_scheme": "Packages/Color Scheme - Default/Mariana.tmTheme",
+
+    // import registers at start-up from json file, if present
+    // file is located at Packages/User/clipman_registers.json
+    "import_registers": true,
 
     // -----------------------------------------------------
     // Popup positioning
