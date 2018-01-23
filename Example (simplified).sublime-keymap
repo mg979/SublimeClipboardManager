@@ -1,0 +1,44 @@
+[
+    // toggle yank mode
+    { "keys": ["alt+y"],                 "command": "clipboard_manager_yank_mode", "context": [{"key": "clip_man", "operator": "equal", "operand": "yank_mode"}] },
+
+    // yank
+    { "keys": ["super+y"],               "args": {"yank": true},                                 "command": "clipboard_manager" },
+    { "keys": ["super+shift+y"],         "args": {"yank": true, "indent": true},                 "command": "clipboard_manager" },
+
+    // paste next/previous
+    { "keys": ["super+shift+v"],         "args": {"previous_and_paste": true},                   "command": "clipboard_manager" },
+    { "keys": ["super+alt+v"],           "args": {"next_and_paste": true},                       "command": "clipboard_manager" },
+
+    // navigate history (updates current clipboard)
+    { "keys": ["super+pageup"],          "args": {"previous": true},                             "command": "clipboard_manager" },
+    { "keys": ["super+pagedown"],        "args": {"next": true},                                 "command": "clipboard_manager" },
+
+    // quick panels
+    { "keys": ["super+alt+ctrl+v"],      "args": {"choose_and_paste": true},                     "command": "clipboard_manager" },
+    { "keys": ["super+alt+ctrl+y"],      "args": {"yank": true, "choose": true},                 "command": "clipboard_manager" },
+
+    // enter command mode
+    { "keys": ["super+ctrl+shift+v"],    "command": "clipboard_manager_command_mode" },
+
+    // show registers/history (command mode)
+    { "keys": ["?"],                     "command": "clipboard_manager_show_registers",                "context": [{"key": "clip_man"}]},
+    { "keys": ["/"],                     "command": "clipboard_manager_show",                          "context": [{"key": "clip_man"}]},
+    { "keys": ["alt+/"],                 "command": "clipboard_manager_show", "args": {"yank": true},  "context": [{"key": "clip_man"}]},
+
+    // register actions (command mode)
+    { "keys": [";"],                     "args": {"mode": "copy"},                               "context": [{"key": "clip_man"}], "command": "clipboard_manager_register" },
+    { "keys": ["'"],                     "args": {"mode": "paste"},                              "context": [{"key": "clip_man"}], "command": "clipboard_manager_register" },
+    { "keys": ["\""],                    "args": {"mode": "paste", "indent": true},              "context": [{"key": "clip_man"}], "command": "clipboard_manager_register" },
+    { "keys": ["\\"],                    "args": {"mode": "options"},                            "context": [{"key": "clip_man"}], "command": "clipboard_manager_register" },
+
+    // buffers
+    { "keys": ["escape"],          "args": {"action": "quit"}, "command": "clipboard_manager_buffer", "context": [{"key": "selector", "operator": "equal", "operand": "clipman-buffer"}]},
+    { "keys": ["q"],               "args": {"action": "quit"}, "command": "clipboard_manager_buffer", "context": [{"key": "selector", "operator": "equal", "operand": "clipman-buffer"}]},
+    { "keys": ["c"],               "args": {"action": "copy"}, "command": "clipboard_manager_buffer", "context": [{"key": "selector", "operator": "equal", "operand": "clipman-buffer"}]},
+    { "keys": ["t"],               "args": {"action": "text"}, "command": "clipboard_manager_buffer", "context": [{"key": "selector", "operator": "equal", "operand": "clipman-buffer"}]},
+
+    // clear lists (for yank list, alt+y is enough if using explicit_yank_mode)
+    { "keys": ["super+k", "super+shift+v"], "args": {"clear_history": true},                        "command": "clipboard_manager" },
+    { "keys": ["super+k", "super+shift+y"], "args": {"clear_yank_list": true},                      "command": "clipboard_manager" },
+]
